@@ -30,3 +30,7 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Local-only design docs (personal context, not in this repo)
+SPEC.md
+tasks/plan.md
