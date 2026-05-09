@@ -63,6 +63,33 @@ type(scope?): Subject (T<NN>)
 - `tasks/todo.md` is the canonical local task list. The PR for a planned
   task flips that task's checkbox from `[ ]` to `[x]` in the same merge.
 
+### PR labels
+
+Every PR carries:
+
+- **One type label** matching the branch's commit-type prefix:
+
+  | Branch prefix | Label           |
+  |---------------|-----------------|
+  | `feat`        | `feature`       |
+  | `fix`         | `bug`           |
+  | `docs`        | `documentation` |
+  | `refactor`    | `refactor`      |
+  | `test`        | `test`          |
+  | `ci`          | `ci`            |
+
+  `chore` and `build` PRs go unlabeled on type unless a quality label
+  fits (`code quality`, `test`, `ci`).
+
+- **One or more `area:*` labels** — one per package the diff touches
+  (`area:cli`, `area:prompt`, `area:service`, `area:store`, `area:config`,
+  `area:i18n`, `area:migrations`).
+- **Quality labels** when the PR is primarily about that concern:
+  `code quality` (lint/format), `ci` (workflow), `test` (test infra or
+  coverage).
+- **`dependencies`** is applied automatically by Dependabot; don't add
+  it manually.
+
 ## Code style
 
 | Tool             | Purpose                            |
