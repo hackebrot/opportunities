@@ -92,12 +92,16 @@ Every PR carries:
 
 ## Code style
 
-| Tool             | Purpose                            |
-|------------------|------------------------------------|
-| `gofumpt`        | Formatting. Stricter than `gofmt`. |
-| `golangci-lint`  | Linting.                           |
+| Tool             | Purpose                              |
+|------------------|--------------------------------------|
+| `goimports`      | Import management and formatting.    |
+| `gofumpt`        | Formatting. Stricter than `gofmt`.   |
+| `golangci-lint`  | Linting.                             |
 
-Both run in CI.
+`goimports` and `gofumpt` are pinned as Go module tools and invoked via
+`go tool <name>`. `golangci-lint` is installed separately per
+[upstream guidance](https://golangci-lint.run/docs/welcome/install/local/).
+All three run in CI.
 
 ## Tests
 
