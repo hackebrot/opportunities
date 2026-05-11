@@ -28,3 +28,17 @@ func TestVersionSubcommandPrintsVersion(t *testing.T) {
 		t.Fatalf("version output: got %q, want %q", got, want)
 	}
 }
+
+func TestVersionSubcommandRejectsExtraArgs(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+	root := cli.NewRoot("v1.2.3-test")
+	root.SetOut(&stderr)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"version", "extra"})
+
+	if err := root.Execute(); err == nil {
+		t.Fatal("Execute: expected error for extra args, got nil")
+	}
+}
