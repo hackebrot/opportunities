@@ -40,3 +40,6 @@ tasks/plan.md
 
 # Claude Code local-only settings (per-user permissions, etc.)
 .claude/settings.local.json
+
+# Local-only helper scripts (not part of the shipped project)
+scripts/
