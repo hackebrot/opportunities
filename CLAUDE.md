@@ -10,6 +10,9 @@ See `CONTRIBUTING.md` for git workflow, branch naming, commit message
 format, issue/milestone/PR mechanics, code style, and test tiers. Follow
 that document.
 
+Don't run `goimports` or `gofumpt` manually — a Claude Code hook
+formats Go files automatically on every edit.
+
 ## Project documents
 
 | Document        | In git? | When to read                              |
