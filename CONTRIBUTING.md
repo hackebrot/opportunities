@@ -59,7 +59,8 @@ type(scope?): Subject (T<NN>)
 - Tasks are tracked as GitHub issues, grouped into per-phase milestones
   (`M1/P1 — Foundation`, `M1/P2 — Companies + Contacts`, etc.).
 - PRs file against the matching milestone and reference the issue
-  with `Closes #N` so the merge auto-closes it.
+  with `Closes #N` in the PR description (not in commit messages) so
+  the merge auto-closes it.
 - `tasks/todo.md` is the canonical local task list. The PR for a planned
   task flips that task's checkbox from `[ ]` to `[x]` in the same merge.
 
