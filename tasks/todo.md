@@ -7,7 +7,7 @@ local-only design docs not committed to this repo.
 
 ## M1/P1 — Foundation
 
-- [ ] **T01** (#1) — Repo bootstrap: `go.mod`, project tree, `cmd/opps/main.go`
+- [x] **T01** (#1) — Repo bootstrap: `go.mod`, project tree, `cmd/opps/main.go`
       with cobra root + `opps version` + ldflags wiring, Makefile, `.gitignore`.
 - [ ] **T02** (#2) — CI workflow: `.github/workflows/ci.yml` (lint + gofumpt +
       unit + integration on ubuntu-latest); `.golangci.yml` with `forbidigo`
