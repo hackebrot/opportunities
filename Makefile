@@ -32,6 +32,10 @@ lint:
 		go tool goimports -d $$dirs; \
 		exit 1; \
 	fi
+	@command -v golangci-lint >/dev/null 2>&1 || { \
+		echo "golangci-lint not installed — see https://golangci-lint.run/docs/welcome/install/local/"; \
+		exit 1; \
+	}
 	golangci-lint run
 
 fmt:
