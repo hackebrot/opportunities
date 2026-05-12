@@ -102,15 +102,15 @@ Every PR carries:
 `goimports` and `gofumpt` are pinned as Go module tools and invoked via
 `go tool <name>`. `golangci-lint` is installed separately per
 [upstream guidance](https://golangci-lint.run/docs/welcome/install/local/).
-All three will run in CI once T02 lands.
+All three run in CI.
 
 ## Tests
 
-| Tier        | Command                                                                 | DB                                | CI (once T02 lands) |
-|-------------|-------------------------------------------------------------------------|-----------------------------------|---------------------|
-| Unit        | `go test ./...`                                                         | None — fakes/in-memory only.      | Yes                 |
-| Integration | `go test -tags=integration -run '^TestIntegration' -count=1 ./...`      | testcontainers Postgres 16.       | Yes                 |
-| e2e         | `go test -tags=e2e -run '^TestE2E' -count=1 ./...`                      | Local Homebrew Postgres.          | No                  |
+| Tier        | Command                                                            | DB                           | CI  |
+|-------------|--------------------------------------------------------------------|------------------------------|-----|
+| Unit        | `go test ./...`                                                    | None — fakes/in-memory only. | Yes |
+| Integration | `go test -tags=integration -run '^TestIntegration' -count=1 ./...` | testcontainers Postgres 16.  | Yes |
+| e2e         | `go test -tags=e2e -run '^TestE2E' -count=1 ./...`                 | Local Homebrew Postgres.     | No  |
 
 The `Makefile` mirrors these as `make test`, `make int`, `make e2e`.
 
