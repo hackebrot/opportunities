@@ -108,7 +108,7 @@ All three run in CI.
 
 | Tier        | Command                                                            | DB                           | CI  |
 |-------------|--------------------------------------------------------------------|------------------------------|-----|
-| Unit        | `go test ./...`                                                    | None — fakes/in-memory only. | Yes |
+| Unit        | `go test -race ./...`                                              | None — fakes/in-memory only. | Yes |
 | Integration | `go test -tags=integration -run '^TestIntegration' -count=1 ./...` | testcontainers Postgres 16.  | Yes |
 | e2e         | `go test -tags=e2e -run '^TestE2E' -count=1 ./...`                 | Local Homebrew Postgres.     | No  |
 

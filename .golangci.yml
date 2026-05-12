@@ -11,7 +11,7 @@ linters:
     forbidigo:
       forbid:
         - pattern: '^time\.Now$'
-          msg: "use the injected clock instead of time.Now(); see SPEC.md Boundaries"
+          msg: "use the injected clock instead of time.Now()"
       exclude-godoc-examples: true
   exclusions:
     rules:
