@@ -1,0 +1,18 @@
+{
+  "enabledPlugins": {
+    "gopls-lsp@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | { read -r f; case \"$f\" in *.go) (cd \"$CLAUDE_PROJECT_DIR\" && go tool goimports -w \"$f\" && go tool gofumpt -w \"$f\") ;; esac; }"
+          }
+        ]
+      }
+    ]
+  }
+}

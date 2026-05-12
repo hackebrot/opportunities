@@ -59,7 +59,8 @@ type(scope?): Subject (T<NN>)
 - Tasks are tracked as GitHub issues, grouped into per-phase milestones
   (`M1/P1 — Foundation`, `M1/P2 — Companies + Contacts`, etc.).
 - PRs file against the matching milestone and reference the issue
-  with `Closes #N` so the merge auto-closes it.
+  with `Closes #N` in the PR description (not in commit messages) so
+  the merge auto-closes it.
 - `tasks/todo.md` is the canonical local task list. The PR for a planned
   task flips that task's checkbox from `[ ]` to `[x]` in the same merge.
 
@@ -92,19 +93,23 @@ Every PR carries:
 
 ## Code style
 
-| Tool             | Purpose                            |
-|------------------|------------------------------------|
-| `gofumpt`        | Formatting. Stricter than `gofmt`. |
-| `golangci-lint`  | Linting.                           |
+| Tool             | Purpose                              |
+|------------------|--------------------------------------|
+| `goimports`      | Import management and formatting.    |
+| `gofumpt`        | Formatting. Stricter than `gofmt`.   |
+| `golangci-lint`  | Linting.                             |
 
-Both run in CI.
+`goimports` and `gofumpt` are pinned as Go module tools and invoked via
+`go tool <name>`. `golangci-lint` is installed separately per
+[upstream guidance](https://golangci-lint.run/docs/welcome/install/local/).
+All three will run in CI once T02 lands.
 
 ## Tests
 
-| Tier        | Command                                              | DB                                | Runs in CI |
-|-------------|------------------------------------------------------|-----------------------------------|------------|
-| Unit        | `go test ./...`                                      | None — fakes/in-memory only.      | Yes        |
-| Integration | `go test -tags=integration -count=1 ./...`           | testcontainers Postgres 16.       | Yes        |
-| e2e         | `go test -tags=e2e -count=1 ./...`                   | Local Homebrew Postgres.          | No         |
+| Tier        | Command                                              | DB                                | CI (once T02 lands) |
+|-------------|------------------------------------------------------|-----------------------------------|---------------------|
+| Unit        | `go test ./...`                                      | None — fakes/in-memory only.      | Yes                 |
+| Integration | `go test -tags=integration -count=1 ./...`           | testcontainers Postgres 16.       | Yes                 |
+| e2e         | `go test -tags=e2e -count=1 ./...`                   | Local Homebrew Postgres.          | No                  |
 
 The `Makefile` mirrors these as `make test`, `make int`, `make e2e`.

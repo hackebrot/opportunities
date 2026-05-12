@@ -1,6 +1,9 @@
 # If you prefer the allow list template instead of the deny list, see community template:
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
+# Build output
+bin/
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -18,7 +21,7 @@ coverage.*
 profile.cov
 
 # Dependency directories (remove the comment below to include it)
-# vendor/
+vendor/
 
 # Go workspace file
 go.work
@@ -34,3 +37,9 @@ go.work.sum
 # Local-only design docs (personal context, not in this repo)
 SPEC.md
 tasks/plan.md
+
+# Claude Code local-only settings (per-user permissions, etc.)
+.claude/settings.local.json
+
+# Local-only helper scripts (not part of the shipped project)
+scripts/
