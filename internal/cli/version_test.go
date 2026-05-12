@@ -32,10 +32,10 @@ func TestVersionSubcommandPrintsVersion(t *testing.T) {
 func TestVersionSubcommandRejectsExtraArgs(t *testing.T) {
 	t.Parallel()
 
-	var stderr bytes.Buffer
+	var buf bytes.Buffer
 	root := cli.NewRoot("v1.2.3-test")
-	root.SetOut(&stderr)
-	root.SetErr(&stderr)
+	root.SetOut(&buf)
+	root.SetErr(&buf)
 	root.SetArgs([]string{"version", "extra"})
 
 	if err := root.Execute(); err == nil {
