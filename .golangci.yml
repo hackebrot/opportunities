@@ -1,0 +1,34 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - forbidigo
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: '^time\.Now$'
+          msg: "use the injected clock instead of time.Now()"
+      exclude-godoc-examples: true
+  exclusions:
+    rules:
+      # main packages may seed the clock from time.Now().
+      - path: ^cmd/
+        linters:
+          - forbidigo
+      # Tests assert against time directly; they may use time.Now().
+      - path: _test\.go
+        linters:
+          - forbidigo
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/hackebrot/opportunities

@@ -9,7 +9,7 @@ local-only design docs not committed to this repo.
 
 - [x] **T01** (#1) — Repo bootstrap: `go.mod`, project tree, `cmd/opps/main.go`
       with cobra root + `opps version` + ldflags wiring, Makefile, `.gitignore`.
-- [ ] **T02** (#2) — CI workflow: `.github/workflows/ci.yml` (lint + gofumpt +
+- [x] **T02** (#2) — CI workflow: `.github/workflows/ci.yml` (lint + gofumpt +
       unit + integration on ubuntu-latest); `.golangci.yml` with `forbidigo`
       rule for `time.Now()`; smoke testcontainers run to confirm Docker
       availability.

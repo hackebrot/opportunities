@@ -13,10 +13,10 @@ test:
 	go test -race $(PKG)
 
 int:
-	go test -tags=integration -count=1 $(PKG)
+	go test -tags=integration -run '^TestIntegration' -count=1 $(PKG)
 
 e2e:
-	go test -tags=e2e -count=1 $(PKG)
+	go test -tags=e2e -run '^TestE2E' -count=1 $(PKG)
 
 lint:
 	@dirs=$$(go list -f '{{.Dir}}' $(PKG)); \

@@ -102,14 +102,30 @@ Every PR carries:
 `goimports` and `gofumpt` are pinned as Go module tools and invoked via
 `go tool <name>`. `golangci-lint` is installed separately per
 [upstream guidance](https://golangci-lint.run/docs/welcome/install/local/).
-All three will run in CI once T02 lands.
+All three run in CI.
 
 ## Tests
 
-| Tier        | Command                                              | DB                                | CI (once T02 lands) |
-|-------------|------------------------------------------------------|-----------------------------------|---------------------|
-| Unit        | `go test ./...`                                      | None — fakes/in-memory only.      | Yes                 |
-| Integration | `go test -tags=integration -count=1 ./...`           | testcontainers Postgres 16.       | Yes                 |
-| e2e         | `go test -tags=e2e -count=1 ./...`                   | Local Homebrew Postgres.          | No                  |
+| Tier        | Command                                                            | DB                           | CI  |
+|-------------|--------------------------------------------------------------------|------------------------------|-----|
+| Unit        | `go test -race ./...`                                              | None — fakes/in-memory only. | Yes |
+| Integration | `go test -tags=integration -run '^TestIntegration' -count=1 ./...` | testcontainers Postgres 16.  | Yes |
+| e2e         | `go test -tags=e2e -run '^TestE2E' -count=1 ./...`                 | Local Homebrew Postgres.     | No  |
 
 The `Makefile` mirrors these as `make test`, `make int`, `make e2e`.
+
+### Naming integration and e2e tests
+
+Go has no built-in way to tag tests with arbitrary labels, so we use
+two layered conventions to keep tiers separate:
+
+1. **Build tag on the file.** Integration test files start with
+   `//go:build integration`; e2e files with `//go:build e2e`. This
+   excludes them from `go test ./...` at compile time.
+2. **Function-name prefix.** Integration test functions are named
+   `TestIntegration<...>`; e2e functions are named `TestE2E<...>`. CI
+   selects them with `-run '^TestIntegration'` / `-run '^TestE2E'` so
+   the integration and e2e steps don't re-run the unit suite.
+
+Both are required: the build tag keeps the test out of the default
+build; the name prefix lets the tag's job run only the tests it owns.
