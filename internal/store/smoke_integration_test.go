@@ -12,10 +12,11 @@ import (
 	tcpg "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
-// TestPostgresSmoke is the canary for the integration tier: it spins
-// up a Postgres container, connects, and pings. If Docker is missing
-// or unreachable, this fails fast before any schema or store test does.
-func TestPostgresSmoke(t *testing.T) {
+// TestIntegrationPostgresSmoke is the canary for the integration tier:
+// it spins up a Postgres container, connects, and pings. If Docker is
+// missing or unreachable, this fails fast before any schema or store
+// test does.
+func TestIntegrationPostgresSmoke(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
