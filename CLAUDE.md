@@ -52,16 +52,21 @@ User-only (never run by the agent):
 - `git rebase`
 - `git reset --hard`
 - `git branch -D`
+- `git push`
 
-These can rewrite history or destroy uncommitted work.
+These either rewrite history, destroy uncommitted work, or publish to
+remotes — always run by the user.
 
 Propose and wait for approval:
 
-- `git push`
 - `gh pr create`
 - `gh issue create`
 
-These create or publish state but don't destroy anything. Same approval
-flow as commits.
+These publish state but don't destroy anything. Same approval flow as
+commits.
+
+When proposing `gh pr create`, include `--label` and `--milestone` flags
+per the rules in `CONTRIBUTING.md` (`## Issues, milestones, PRs`) — set
+them at creation time, not after.
 
 Never use `git add -A` or `git add .` — always stage by file name.
