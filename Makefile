@@ -2,6 +2,7 @@ BIN          := bin/opps
 PKG          := ./...
 VERSION      ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS      := -X main.version=$(VERSION)
+GOIMPORTS_LOCAL := github.com/hackebrot/opportunities
 
 .PHONY: build test int e2e lint fmt clean
 
@@ -26,10 +27,10 @@ lint:
 		go tool gofumpt -d $$dirs; \
 		exit 1; \
 	fi; \
-	out=$$(go tool goimports -l $$dirs); \
+	out=$$(go tool goimports -local $(GOIMPORTS_LOCAL) -l $$dirs); \
 	if [ -n "$$out" ]; then \
 		echo "goimports: needs formatting:"; echo "$$out"; \
-		go tool goimports -d $$dirs; \
+		go tool goimports -local $(GOIMPORTS_LOCAL) -d $$dirs; \
 		exit 1; \
 	fi
 	@command -v golangci-lint >/dev/null 2>&1 || { \
@@ -40,7 +41,7 @@ lint:
 
 fmt:
 	@dirs=$$(go list -f '{{.Dir}}' $(PKG)); \
-	go tool goimports -w $$dirs; \
+	go tool goimports -local $(GOIMPORTS_LOCAL) -w $$dirs; \
 	go tool gofumpt -w $$dirs
 
 clean:

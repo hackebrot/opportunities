@@ -13,7 +13,7 @@ local-only design docs not committed to this repo.
       unit + integration on ubuntu-latest); `.golangci.yml` with `forbidigo`
       rule for `time.Now()`; smoke testcontainers run to confirm Docker
       availability.
-- [ ] **T03** (#3) — Config loader (`internal/config`, `internal/log`): TOML +
+- [x] **T03** (#3) — Config loader (`internal/config`, `internal/log`): TOML +
       `OPPS_*` env overrides; only M1 keys are *read*, others parse as
       no-op forward compat. zap text encoder to stderr.
 - [ ] **T04** (#4) — i18n loader (`internal/i18n`): `embed.FS` over
