@@ -16,7 +16,7 @@ local-only design docs not committed to this repo.
 - [x] **T03** (#3) — Config loader (`internal/config`, `internal/log`): TOML +
       `OPPS_*` env overrides; only M1 keys are *read*, others parse as
       no-op forward compat. zap text encoder to stderr.
-- [ ] **T04** (#4) — i18n loader (`internal/i18n`): `embed.FS` over
+- [x] **T04** (#4) — i18n loader (`internal/i18n`): `embed.FS` over
       `locales/*.toml`, `i18n.T(locale, key, args...)`, empty en-US.toml
       stub. **Machinery only — CLI stays English-only.**
 - [ ] **T05** (#5) — Schema migration `0001_init.up/down.sql`: every table,
