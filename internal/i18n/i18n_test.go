@@ -95,45 +95,73 @@ func TestTranslatorExtraArgsWarnAndOnlyFirstIsUsed(t *testing.T) {
 	}
 }
 
-func TestTranslatorTemplateParseErrorReturnsRawMessageAndWarns(t *testing.T) {
+func TestTranslatorTemplateFailureReturnsRawMessageAndWarns(t *testing.T) {
 	t.Parallel()
 
-	warn, lines := newRecorder(t)
-	tr := i18n.New(i18n.Catalogs{
-		"en-US": {"broken": "Hello, {{.Name"},
-	}, i18n.WithWarn(warn))
+	cases := []struct {
+		name    string
+		key     string
+		message string
+		data    any
+	}{
+		{
+			name:    "parse error: unterminated action",
+			key:     "broken",
+			message: "Hello, {{.Name",
+			data:    map[string]any{"Name": "World"},
+		},
+		{
+			name:    "execute error: missing struct field",
+			key:     "needs.field",
+			message: "Hello, {{.Name}}!",
+			data:    struct{ Other string }{Other: "x"},
+		},
+		{
+			// Without Option("missingkey=error") this case silently renders
+			// "<no value>" and the warn path is bypassed.
+			name:    "execute error: missing map key",
+			key:     "needs.field",
+			message: "Hello, {{.Name}}!",
+			data:    map[string]any{"Other": "x"},
+		},
+	}
 
-	got := tr.T("en-US", "broken", map[string]any{"Name": "World"})
-	if want := "Hello, {{.Name"; got != want {
-		t.Errorf("T: got %q, want %q", got, want)
-	}
-	if len(*lines) != 1 {
-		t.Fatalf("expected one warning, got %d: %v", len(*lines), *lines)
-	}
-	if !strings.Contains((*lines)[0], "broken") {
-		t.Errorf("warning %q should mention the key", (*lines)[0])
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			warn, lines := newRecorder(t)
+			tr := i18n.New(i18n.Catalogs{
+				"en-US": {tc.key: tc.message},
+			}, i18n.WithWarn(warn))
+
+			got := tr.T("en-US", tc.key, tc.data)
+			if got != tc.message {
+				t.Errorf("T: got %q, want raw message %q", got, tc.message)
+			}
+			if len(*lines) != 1 {
+				t.Fatalf("expected one warning, got %d: %v", len(*lines), *lines)
+			}
+			if !strings.Contains((*lines)[0], tc.key) {
+				t.Errorf("warning %q should mention the key", (*lines)[0])
+			}
+		})
 	}
 }
 
-func TestTranslatorTemplateExecuteErrorReturnsRawMessageAndWarns(t *testing.T) {
+func TestLoadReturnsErrorOnMalformedTOML(t *testing.T) {
 	t.Parallel()
 
-	warn, lines := newRecorder(t)
-	tr := i18n.New(i18n.Catalogs{
-		"en-US": {"needs.field": "Hello, {{.Name}}!"},
-	}, i18n.WithWarn(warn))
+	fsys := fstest.MapFS{
+		"bad.toml": {Data: []byte("not = valid = toml")},
+	}
 
-	// Passing a struct without the Name field triggers an execute error
-	// (parse succeeds; missing field on a struct fails at exec time).
-	got := tr.T("en-US", "needs.field", struct{ Other string }{Other: "x"})
-	if want := "Hello, {{.Name}}!"; got != want {
-		t.Errorf("T: got %q, want %q", got, want)
+	_, err := i18n.Load(fsys)
+	if err == nil {
+		t.Fatal("Load: expected error, got nil")
 	}
-	if len(*lines) != 1 {
-		t.Fatalf("expected one warning, got %d: %v", len(*lines), *lines)
-	}
-	if !strings.Contains((*lines)[0], "needs.field") {
-		t.Errorf("warning %q should mention the key", (*lines)[0])
+	if !strings.Contains(err.Error(), "bad.toml") {
+		t.Errorf("error %q should mention the offending file", err.Error())
 	}
 }
 

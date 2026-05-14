@@ -22,8 +22,9 @@ type Catalog map[string]string
 // Catalogs maps locale tags (e.g. "en-US") to their per-locale Catalog.
 type Catalogs map[string]Catalog
 
-// WarnFunc receives a single line per missing key or template failure,
-// formatted like fmt.Sprintf.
+// WarnFunc receives a single line per missing key, template parse/execute
+// failure, or extra args passed to T. The format and arguments follow
+// fmt.Sprintf conventions.
 type WarnFunc func(format string, args ...any)
 
 // Translator resolves message keys against a set of per-locale catalogs,
@@ -37,8 +38,9 @@ type Translator struct {
 // Option configures a Translator at construction time.
 type Option func(*Translator)
 
-// WithWarn replaces the no-op warning sink; the function is called once
-// per missing key or template failure.
+// WithWarn replaces the no-op warning sink. The function is called once
+// per missing key, template parse/execute failure, or extra args passed
+// to T.
 func WithWarn(fn WarnFunc) Option {
 	return func(t *Translator) { t.warn = fn }
 }
@@ -99,7 +101,7 @@ func (t *Translator) T(locale, key string, args ...any) string {
 	if len(args) > 1 {
 		t.warn("i18n: key %q got %d args, only the first is used", key, len(args))
 	}
-	tmpl, err := template.New(key).Parse(msg)
+	tmpl, err := template.New(key).Option("missingkey=error").Parse(msg)
 	if err != nil {
 		t.warn("i18n: parse %q: %v", key, err)
 		return msg
