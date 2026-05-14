@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -176,6 +177,9 @@ func TestLoadFromInvalidHTTPPortEnv(t *testing.T) {
 	if err == nil {
 		t.Fatal("LoadFrom: expected error for non-numeric OPPS_HTTP_PORT, got nil")
 	}
+	if !strings.Contains(err.Error(), "OPPS_HTTP_PORT") {
+		t.Errorf("error should attribute the source env var, got: %v", err)
+	}
 
 	if diff := cmp.Diff(config.Config{}, got); diff != "" {
 		t.Errorf("expected zero Config on error (-want +got):\n%s", diff)
@@ -200,6 +204,9 @@ func TestLoadFromHTTPPortOutOfRangeEnv(t *testing.T) {
 			got, err := config.LoadFrom("", func(k string) string { return env[k] })
 			if err == nil {
 				t.Fatal("LoadFrom: expected error for out-of-range port, got nil")
+			}
+			if !strings.Contains(err.Error(), "OPPS_HTTP_PORT") {
+				t.Errorf("error should attribute the source env var, got: %v", err)
 			}
 			if diff := cmp.Diff(config.Config{}, got); diff != "" {
 				t.Errorf("expected zero Config on error (-want +got):\n%s", diff)
