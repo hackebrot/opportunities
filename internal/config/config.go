@@ -171,6 +171,9 @@ func applyEnv(cfg *Config, getenv func(string) string) error {
 		if err != nil {
 			return fmt.Errorf("config: OPPS_HTTP_PORT %q: %w", v, err)
 		}
+		if p < 1 || p > 65535 {
+			return fmt.Errorf("config: OPPS_HTTP_PORT %d out of range (1-65535)", p)
+		}
 		cfg.HTTP.Port = p
 	}
 	if v := getenv("OPPS_LOG_LEVEL"); v != "" {
