@@ -23,14 +23,11 @@ func New(level string) (*zap.Logger, error) {
 		TimeKey:        "ts",
 		LevelKey:       "level",
 		NameKey:        "logger",
-		CallerKey:      "caller",
 		MessageKey:     "msg",
-		StacktraceKey:  "stacktrace",
 		LineEnding:     zapcore.DefaultLineEnding,
 		EncodeLevel:    zapcore.CapitalLevelEncoder,
 		EncodeTime:     zapcore.ISO8601TimeEncoder,
 		EncodeDuration: zapcore.StringDurationEncoder,
-		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
 	core := zapcore.NewCore(
 		zapcore.NewConsoleEncoder(encCfg),
