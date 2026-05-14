@@ -263,40 +263,31 @@ func TestLoadFromHTTPPortBoundaries(t *testing.T) {
 }
 
 func TestDefaultPathHonorsXDG(t *testing.T) {
-	t.Parallel()
-
-	getenv := func(k string) string {
-		if k == "XDG_CONFIG_HOME" {
-			return "/tmp/xdg"
-		}
-		return ""
-	}
-	homeDir := func() (string, error) { return "/home/user", nil }
+	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg")
+	t.Setenv("HOME", "/home/user")
 	want := filepath.Join("/tmp/xdg", "opportunities", "config.toml")
 
-	got, err := config.DefaultPathFor(getenv, homeDir)
+	got, err := config.DefaultPath()
 	if err != nil {
-		t.Fatalf("DefaultPathFor: %v", err)
+		t.Fatalf("DefaultPath: %v", err)
 	}
 
 	if got != want {
-		t.Errorf("DefaultPathFor: got %q, want %q", got, want)
+		t.Errorf("DefaultPath: got %q, want %q", got, want)
 	}
 }
 
 func TestDefaultPathFallsBackToHome(t *testing.T) {
-	t.Parallel()
-
-	getenv := func(string) string { return "" }
-	homeDir := func() (string, error) { return "/home/user", nil }
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", "/home/user")
 	want := filepath.Join("/home/user", ".config", "opportunities", "config.toml")
 
-	got, err := config.DefaultPathFor(getenv, homeDir)
+	got, err := config.DefaultPath()
 	if err != nil {
-		t.Fatalf("DefaultPathFor: %v", err)
+		t.Fatalf("DefaultPath: %v", err)
 	}
 
 	if got != want {
-		t.Errorf("DefaultPathFor: got %q, want %q", got, want)
+		t.Errorf("DefaultPath: got %q, want %q", got, want)
 	}
 }

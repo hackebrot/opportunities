@@ -186,15 +186,10 @@ func applyEnv(cfg *Config, getenv func(string) string) error {
 // $XDG_CONFIG_HOME/opportunities/config.toml when XDG_CONFIG_HOME is set,
 // otherwise ~/.config/opportunities/config.toml.
 func DefaultPath() (string, error) {
-	return DefaultPathFor(os.Getenv, os.UserHomeDir)
-}
-
-// DefaultPathFor is DefaultPath with injectable lookups, used in tests.
-func DefaultPathFor(getenv func(string) string, homeDir func() (string, error)) (string, error) {
-	if x := getenv("XDG_CONFIG_HOME"); x != "" {
+	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
 		return filepath.Join(x, "opportunities", "config.toml"), nil
 	}
-	home, err := homeDir()
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("config: resolve home dir: %w", err)
 	}
