@@ -13,6 +13,12 @@ that document.
 Don't run `goimports` or `gofumpt` manually — a Claude Code hook
 formats Go files automatically on every edit.
 
+This repo is public. No PII in committed defaults, fixtures, or example
+configs — no salary numbers, real names, real emails, or addresses. Use
+zero/empty/placeholder values; users supply real numbers in their local
+`config.toml`. Generic structural choices (currency code, locale,
+`example.com` placeholders) are fine.
+
 ## Project documents
 
 | Document        | In git? | When to read                              |
