@@ -1,3 +1,6 @@
+// Package store owns the Postgres connection pool and the embedded
+// goose migration operations that back the `opps db` subcommand. It is
+// the single entry point that other packages use to reach the database.
 package store
 
 import (
@@ -32,8 +35,9 @@ func (s *Store) Close() {
 }
 
 // sqlDB bridges the pgxpool to database/sql so goose can drive
-// migrations. The returned *sql.DB shares the pool; Close it after use
-// to release the borrowed conn back to the pool.
+// migrations. Each Migrate*/Reset call opens a fresh *sql.DB that
+// borrows from the pool for the duration of that one operation, then
+// Closes it to return connections to the pool.
 func (s *Store) sqlDB() *sql.DB {
 	return stdlib.OpenDBFromPool(s.Pool)
 }
@@ -92,6 +96,11 @@ func (s *Store) MigrateRedo(ctx context.Context) error {
 
 // Reset rolls every migration back and re-applies them. Powers
 // `opps db reset --yes` — destroys the schema's data.
+//
+// A failure in the down phase short-circuits before re-applying, which
+// can leave the schema partially torn down. The intended recovery is to
+// rerun reset (or `db migrate up`) — both are idempotent against a
+// partial state.
 func (s *Store) Reset(ctx context.Context) error {
 	db := s.sqlDB()
 	defer db.Close()

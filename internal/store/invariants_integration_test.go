@@ -17,6 +17,12 @@ import (
 // partial unique index from 00001_init.sql by attempting violating
 // inserts and asserting that Postgres rejects them with the right
 // SQLSTATE.
+//
+// Subtests share one Postgres container and an unrolled-back schema —
+// each subtest namespaces its inserts by company slug ("acme",
+// "becme", ...) instead of truncating between runs. New subtests must
+// either follow that pattern or query with a WHERE clause scoped to
+// their own opportunity_id; an unscoped SELECT would see prior rows.
 func TestIntegrationSchemaInvariants(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
