@@ -40,11 +40,11 @@ func newDBMigrateSubcmd(use, short string, op func(*store.Store, context.Context
 		Short: short,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			s, cleanup, err := openStoreFromConfig(cmd)
+			s, err := openStoreFromConfig(cmd)
 			if err != nil {
 				return err
 			}
-			defer cleanup()
+			defer s.Close()
 			return op(s, cmd.Context())
 		},
 	}
@@ -60,11 +60,11 @@ func newDBResetCmd() *cobra.Command {
 			if !yes {
 				return errors.New("refusing to reset without --yes (this destroys all data)")
 			}
-			s, cleanup, err := openStoreFromConfig(cmd)
+			s, err := openStoreFromConfig(cmd)
 			if err != nil {
 				return err
 			}
-			defer cleanup()
+			defer s.Close()
 			return s.Reset(cmd.Context())
 		},
 	}
@@ -72,14 +72,14 @@ func newDBResetCmd() *cobra.Command {
 	return cmd
 }
 
-func openStoreFromConfig(cmd *cobra.Command) (*store.Store, func(), error) {
+func openStoreFromConfig(cmd *cobra.Command) (*store.Store, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		return nil, nil, fmt.Errorf("db: load config: %w", err)
+		return nil, fmt.Errorf("db: load config: %w", err)
 	}
 	s, err := store.Open(cmd.Context(), cfg.Database.URL)
 	if err != nil {
-		return nil, nil, fmt.Errorf("db: open store: %w", err)
+		return nil, fmt.Errorf("db: open store: %w", err)
 	}
-	return s, s.Close, nil
+	return s, nil
 }
