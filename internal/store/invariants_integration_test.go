@@ -4,33 +4,32 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // TestIntegrationSchemaInvariants exercises the CHECK constraints and
 // partial unique index from 00001_init.sql by attempting violating
 // inserts and asserting that Postgres rejects them with the right
-// SQLSTATE. The migration is applied once for the whole subtest tree.
+// SQLSTATE.
 func TestIntegrationSchemaInvariants(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	sqlDB := startPostgres(ctx, t)
-	if err := migrateUp(ctx, sqlDB); err != nil {
+	store := startPostgresStore(ctx, t)
+	if err := store.MigrateUp(ctx); err != nil {
 		t.Fatalf("migrate up: %v", err)
 	}
+	pool := store.Pool
 
-	// Each subtest gets its own freshly seeded company + opportunity so
-	// failures are isolated from one another.
 	t.Run("office_days_per_week rejects 6", func(t *testing.T) {
-		companyID := insertCompany(ctx, t, sqlDB, "acme")
-		_, err := sqlDB.ExecContext(ctx, `
+		companyID := insertCompany(ctx, t, pool, "acme")
+		_, err := pool.Exec(ctx, `
 			INSERT INTO opportunities (company_id, office_days_per_week,
 				source, priority, latest_status)
 			VALUES ($1, 6, 'outbound', 'normal', 'watching')
@@ -39,9 +38,9 @@ func TestIntegrationSchemaInvariants(t *testing.T) {
 	})
 
 	t.Run("currency rejects GBP", func(t *testing.T) {
-		companyID := insertCompany(ctx, t, sqlDB, "becme")
-		oppID := insertOpportunity(ctx, t, sqlDB, companyID)
-		_, err := sqlDB.ExecContext(ctx, `
+		companyID := insertCompany(ctx, t, pool, "becme")
+		oppID := insertOpportunity(ctx, t, pool, companyID)
+		_, err := pool.Exec(ctx, `
 			INSERT INTO compensations (opportunity_id, kind, base_minor, currency)
 			VALUES ($1, 'target', 1000000, 'GBP')
 		`, oppID)
@@ -49,10 +48,10 @@ func TestIntegrationSchemaInvariants(t *testing.T) {
 	})
 
 	t.Run("compensations XOR rejects both targets set", func(t *testing.T) {
-		companyID := insertCompany(ctx, t, sqlDB, "cecme")
-		oppID := insertOpportunity(ctx, t, sqlDB, companyID)
-		appID := insertApplication(ctx, t, sqlDB, oppID, "applied")
-		_, err := sqlDB.ExecContext(ctx, `
+		companyID := insertCompany(ctx, t, pool, "cecme")
+		oppID := insertOpportunity(ctx, t, pool, companyID)
+		appID := insertApplication(ctx, t, pool, oppID, "applied")
+		_, err := pool.Exec(ctx, `
 			INSERT INTO compensations (opportunity_id, application_id,
 				kind, base_minor, currency)
 			VALUES ($1, $2, 'target', 1000000, 'EUR')
@@ -61,18 +60,16 @@ func TestIntegrationSchemaInvariants(t *testing.T) {
 	})
 
 	t.Run("events.label required for custom, forbidden otherwise", func(t *testing.T) {
-		companyID := insertCompany(ctx, t, sqlDB, "decme")
-		oppID := insertOpportunity(ctx, t, sqlDB, companyID)
+		companyID := insertCompany(ctx, t, pool, "decme")
+		oppID := insertOpportunity(ctx, t, pool, companyID)
 
-		// Non-custom event with a label → rejected.
-		_, err := sqlDB.ExecContext(ctx, `
+		_, err := pool.Exec(ctx, `
 			INSERT INTO events (opportunity_id, kind, occurred_at, label)
 			VALUES ($1, 'note', now(), 'stray label')
 		`, oppID)
 		assertCheckViolation(t, err, "events_label_only_for_custom_chk")
 
-		// Custom event without a label → rejected.
-		_, err = sqlDB.ExecContext(ctx, `
+		_, err = pool.Exec(ctx, `
 			INSERT INTO events (opportunity_id, kind, occurred_at)
 			VALUES ($1, 'custom', now())
 		`, oppID)
@@ -80,18 +77,16 @@ func TestIntegrationSchemaInvariants(t *testing.T) {
 	})
 
 	t.Run("archive_reason_category must match status", func(t *testing.T) {
-		companyID := insertCompany(ctx, t, sqlDB, "eecme")
-		oppID := insertOpportunity(ctx, t, sqlDB, companyID)
+		companyID := insertCompany(ctx, t, pool, "eecme")
+		oppID := insertOpportunity(ctx, t, pool, companyID)
 
-		// applied + a category set → rejected (only terminal statuses get one).
-		_, err := sqlDB.ExecContext(ctx, `
+		_, err := pool.Exec(ctx, `
 			INSERT INTO applications (opportunity_id, status, archive_reason_category)
 			VALUES ($1, 'applied', 'other')
 		`, oppID)
 		assertCheckViolation(t, err, "applications_archive_reason_chk")
 
-		// rejected status + a 'compensation' category (declined-only value) → rejected.
-		_, err = sqlDB.ExecContext(ctx, `
+		_, err = pool.Exec(ctx, `
 			INSERT INTO applications (opportunity_id, status, archive_reason_category)
 			VALUES ($1, 'rejected', 'compensation')
 		`, oppID)
@@ -99,23 +94,20 @@ func TestIntegrationSchemaInvariants(t *testing.T) {
 	})
 
 	t.Run("partial unique index blocks two active applications", func(t *testing.T) {
-		companyID := insertCompany(ctx, t, sqlDB, "fecme")
-		oppID := insertOpportunity(ctx, t, sqlDB, companyID)
+		companyID := insertCompany(ctx, t, pool, "fecme")
+		oppID := insertOpportunity(ctx, t, pool, companyID)
 
-		// First active application is fine.
-		insertApplication(ctx, t, sqlDB, oppID, "applied")
+		insertApplication(ctx, t, pool, oppID, "applied")
 
-		// Second active application on the same opportunity is rejected by
-		// the partial unique index (SQLSTATE 23505).
-		_, err := sqlDB.ExecContext(ctx, `
+		_, err := pool.Exec(ctx, `
 			INSERT INTO applications (opportunity_id, status)
 			VALUES ($1, 'in_progress')
 		`, oppID)
 		assertUniqueViolation(t, err, "uq_active_app_per_opportunity")
 
-		// Once the first row moves to a terminal status it leaves the
-		// partial index, and a new active application is allowed.
-		if _, err := sqlDB.ExecContext(ctx, `
+		// Once the first row reaches a terminal status it falls out of
+		// the partial index and a new active application is allowed.
+		if _, err := pool.Exec(ctx, `
 			UPDATE applications
 			SET status = 'rejected',
 			    archive_reason_category = 'process_ended',
@@ -124,18 +116,16 @@ func TestIntegrationSchemaInvariants(t *testing.T) {
 		`, oppID); err != nil {
 			t.Fatalf("retire first application: %v", err)
 		}
-		insertApplication(ctx, t, sqlDB, oppID, "applied")
+		insertApplication(ctx, t, pool, oppID, "applied")
 	})
 
 	t.Run("events composite FK rejects mismatched opportunity", func(t *testing.T) {
-		companyID := insertCompany(ctx, t, sqlDB, "gecme")
-		oppA := insertOpportunity(ctx, t, sqlDB, companyID)
-		oppB := insertOpportunity(ctx, t, sqlDB, companyID)
-		appOnA := insertApplication(ctx, t, sqlDB, oppA, "applied")
+		companyID := insertCompany(ctx, t, pool, "gecme")
+		oppA := insertOpportunity(ctx, t, pool, companyID)
+		oppB := insertOpportunity(ctx, t, pool, companyID)
+		appOnA := insertApplication(ctx, t, pool, oppA, "applied")
 
-		// Attaching an application from opportunity A to an event whose
-		// opportunity_id is B violates the composite FK (SQLSTATE 23503).
-		_, err := sqlDB.ExecContext(ctx, `
+		_, err := pool.Exec(ctx, `
 			INSERT INTO events (opportunity_id, application_id, kind, occurred_at)
 			VALUES ($1, $2, 'note', now())
 		`, oppB, appOnA)
@@ -145,10 +135,10 @@ func TestIntegrationSchemaInvariants(t *testing.T) {
 
 // --- helpers ---------------------------------------------------------------
 
-func insertCompany(ctx context.Context, t *testing.T, sqlDB *sql.DB, slug string) string {
+func insertCompany(ctx context.Context, t *testing.T, pool *pgxpool.Pool, slug string) string {
 	t.Helper()
 	var id string
-	err := sqlDB.QueryRowContext(ctx, `
+	err := pool.QueryRow(ctx, `
 		INSERT INTO companies (name, slug) VALUES ($1, $1) RETURNING id
 	`, slug).Scan(&id)
 	if err != nil {
@@ -157,10 +147,10 @@ func insertCompany(ctx context.Context, t *testing.T, sqlDB *sql.DB, slug string
 	return id
 }
 
-func insertOpportunity(ctx context.Context, t *testing.T, sqlDB *sql.DB, companyID string) string {
+func insertOpportunity(ctx context.Context, t *testing.T, pool *pgxpool.Pool, companyID string) string {
 	t.Helper()
 	var id string
-	err := sqlDB.QueryRowContext(ctx, `
+	err := pool.QueryRow(ctx, `
 		INSERT INTO opportunities (company_id, office_days_per_week,
 			source, priority, latest_status)
 		VALUES ($1, 0, 'outbound', 'normal', 'watching')
@@ -172,10 +162,10 @@ func insertOpportunity(ctx context.Context, t *testing.T, sqlDB *sql.DB, company
 	return id
 }
 
-func insertApplication(ctx context.Context, t *testing.T, sqlDB *sql.DB, oppID, status string) string {
+func insertApplication(ctx context.Context, t *testing.T, pool *pgxpool.Pool, oppID, status string) string {
 	t.Helper()
 	var id string
-	err := sqlDB.QueryRowContext(ctx, `
+	err := pool.QueryRow(ctx, `
 		INSERT INTO applications (opportunity_id, status)
 		VALUES ($1, $2)
 		RETURNING id
@@ -186,8 +176,7 @@ func insertApplication(ctx context.Context, t *testing.T, sqlDB *sql.DB, oppID, 
 	return id
 }
 
-// SQLSTATE codes from postgres. Inlined here rather than pulling in a
-// dependency just for four constants.
+// SQLSTATE codes — inlined rather than pulling pgerrcode for four constants.
 const (
 	sqlstateCheckViolation      = "23514"
 	sqlstateUniqueViolation     = "23505"
@@ -221,9 +210,6 @@ func assertPGError(t *testing.T, err error, wantSQLSTATE, wantConstraint string)
 	if pgErr.Code != wantSQLSTATE {
 		t.Fatalf("want SQLSTATE %s, got %s (message: %s)", wantSQLSTATE, pgErr.Code, pgErr.Message)
 	}
-	// pgErr.ConstraintName is the most direct check; fall back to
-	// substring on the message for indexes (Postgres reports the index
-	// name in the message but not always in ConstraintName).
 	if pgErr.ConstraintName == wantConstraint {
 		return
 	}
