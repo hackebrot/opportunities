@@ -19,7 +19,7 @@ local-only design docs not committed to this repo.
 - [x] **T04** (#4) — i18n loader (`internal/i18n`): `embed.FS` over
       `locales/*.toml`, `i18n.T(locale, key, args...)`, empty en-US.toml
       stub. **Machinery only — CLI stays English-only.**
-- [ ] **T05** (#5) — Schema migration `0001_init.up/down.sql`: every table,
+- [x] **T05** (#5) — Schema migration `db/migrations/00001_init.sql`: every table,
       partial unique index, composite FK on `events` (with `(opportunity_id,
       id)` unique on apps), all CHECKs. `internal/cli/db.go`: `opps db
       migrate up | down | status | redo`, `opps db reset --yes`.
