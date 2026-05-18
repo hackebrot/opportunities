@@ -9,6 +9,9 @@ This is a personal project; contributions are welcome.
   branches after merge.
 - Multiple commits per branch are encouraged when there are logical
   boundaries.
+- Run `make lint` before every `git push`. The same job runs in CI; running
+  it locally first saves a round-trip when it fails. Agents proposing a
+  push must confirm a clean local lint run in the same turn.
 
 ### Branch naming
 
