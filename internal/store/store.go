@@ -38,6 +38,12 @@ func (s *Store) Close() {
 // migrations. Each Migrate*/Reset call opens a fresh *sql.DB that
 // borrows from the pool for the duration of that one operation, then
 // Closes it to return connections to the pool.
+//
+// Callers ignore the *sql.DB.Close error on purpose: the bridge does
+// not own the pool, so "close" just releases borrowed conns; by the
+// time it runs the migration result is already known, and surfacing a
+// release error would mask the more useful goose error. The underlying
+// pool stays alive on Store and is closed via Store.Close.
 func (s *Store) sqlDB() *sql.DB {
 	return stdlib.OpenDBFromPool(s.Pool)
 }
@@ -45,7 +51,7 @@ func (s *Store) sqlDB() *sql.DB {
 // MigrateUp applies every pending migration.
 func (s *Store) MigrateUp(ctx context.Context) error {
 	db := s.sqlDB()
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if err := goose.UpContext(ctx, db, migrationsDir); err != nil {
 		return fmt.Errorf("store: migrate up: %w", err)
 	}
@@ -55,7 +61,7 @@ func (s *Store) MigrateUp(ctx context.Context) error {
 // MigrateDown rolls back the most recently applied migration.
 func (s *Store) MigrateDown(ctx context.Context) error {
 	db := s.sqlDB()
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if err := goose.DownContext(ctx, db, migrationsDir); err != nil {
 		return fmt.Errorf("store: migrate down: %w", err)
 	}
@@ -66,7 +72,7 @@ func (s *Store) MigrateDown(ctx context.Context) error {
 // Pass 0 to roll back every applied migration.
 func (s *Store) MigrateDownTo(ctx context.Context, version int64) error {
 	db := s.sqlDB()
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if err := goose.DownToContext(ctx, db, migrationsDir, version); err != nil {
 		return fmt.Errorf("store: migrate down-to %d: %w", version, err)
 	}
@@ -77,7 +83,7 @@ func (s *Store) MigrateDownTo(ctx context.Context, version int64) error {
 // configured logger.
 func (s *Store) MigrateStatus(ctx context.Context) error {
 	db := s.sqlDB()
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if err := goose.StatusContext(ctx, db, migrationsDir); err != nil {
 		return fmt.Errorf("store: migrate status: %w", err)
 	}
@@ -87,7 +93,7 @@ func (s *Store) MigrateStatus(ctx context.Context) error {
 // MigrateRedo rolls the latest migration back and re-applies it.
 func (s *Store) MigrateRedo(ctx context.Context) error {
 	db := s.sqlDB()
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if err := goose.RedoContext(ctx, db, migrationsDir); err != nil {
 		return fmt.Errorf("store: migrate redo: %w", err)
 	}
@@ -103,7 +109,7 @@ func (s *Store) MigrateRedo(ctx context.Context) error {
 // partial state.
 func (s *Store) Reset(ctx context.Context) error {
 	db := s.sqlDB()
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if err := goose.DownToContext(ctx, db, migrationsDir, 0); err != nil {
 		return fmt.Errorf("store: reset (down): %w", err)
 	}
