@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"syscall"
 
 	"github.com/hackebrot/opportunities/internal/cli"
 )
@@ -20,7 +21,7 @@ func main() {
 	// Cancel the root context on SIGINT/SIGTERM so long-running
 	// operations (migrations, queries) abort cleanly instead of leaving
 	// the pool mid-flight.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	if err := cli.NewRoot(version).ExecuteContext(ctx); err != nil {
