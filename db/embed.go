@@ -7,9 +7,9 @@ package db
 import "embed"
 
 // Migrations is the embedded filesystem rooted at db/, containing
-// migrations/0001_init.up.sql / .down.sql and any future versions.
-// Consumers pass it to goose.SetBaseFS and address the directory as
-// "migrations".
+// migrations/NNNNN_*.sql files (single-file goose format with
+// -- +goose Up / -- +goose Down sections). Consumers pass it to
+// goose.SetBaseFS and address the directory as "migrations".
 //
 //go:embed migrations/*.sql
 var Migrations embed.FS
