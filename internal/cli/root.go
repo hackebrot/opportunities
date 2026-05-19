@@ -8,13 +8,20 @@ import (
 	"github.com/hackebrot/opportunities/internal/prompt"
 )
 
-// nonInteractiveFlag is the persistent root flag name, referenced both
-// where it's registered (NewRoot) and where it's read (WireGlobals).
-const nonInteractiveFlag = "non-interactive"
+// Run every PersistentPreRunE in the parent chain, not just the most
+// specific one. Without this, a subcommand defining its own
+// PersistentPreRunE would silently shadow the root's flag-wiring hook.
+// Set in init() because it's a package-level global in cobra; assigning
+// it inside NewRoot races under -race when tests build multiple roots.
+func init() {
+	cobra.EnableTraverseRunHooks = true
+}
 
 // NewRoot builds the root `opps` command tree. version is the binary
 // version string (set via -ldflags "-X main.version=..." in cmd/opps).
 func NewRoot(version string) *cobra.Command {
+	var nonInteractive bool
+
 	root := &cobra.Command{
 		Use:   "opps",
 		Short: "Local-first CLI for tracking job opportunities and applications",
@@ -24,29 +31,16 @@ func NewRoot(version string) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			return WireGlobals(cmd)
+			cmd.SetContext(prompt.WithNonInteractive(cmd.Context(), nonInteractive))
+			return nil
 		},
 	}
 
-	root.PersistentFlags().Bool(nonInteractiveFlag, false,
+	root.PersistentFlags().BoolVar(&nonInteractive, "non-interactive", false,
 		"Fail instead of prompting when a required value is missing")
 
 	root.AddCommand(newVersionCmd(version))
 	root.AddCommand(newDBCmd())
 
 	return root
-}
-
-// WireGlobals reads root-level persistent flags and installs them into
-// cmd's context. The root's PersistentPreRunE calls this automatically;
-// any subcommand defining its own PersistentPreRun(E) MUST call this
-// from there (cobra does not chain a parent's PersistentPreRun when the
-// child defines its own).
-func WireGlobals(cmd *cobra.Command) error {
-	ni, err := cmd.Root().PersistentFlags().GetBool(nonInteractiveFlag)
-	if err != nil {
-		return err
-	}
-	cmd.SetContext(prompt.WithNonInteractive(cmd.Context(), ni))
-	return nil
 }

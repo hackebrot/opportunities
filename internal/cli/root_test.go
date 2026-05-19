@@ -13,17 +13,21 @@ import (
 
 // TestNonInteractiveFlagPropagatesToContext verifies the persistent
 // --non-interactive flag is wired through to the command context so
-// prompt helpers can honor it.
+// prompt helpers can honor it. The "shadowed" case also guards against
+// accidental removal of cobra.EnableTraverseRunHooks: a child defining
+// its own PersistentPreRunE must not suppress the root's flag wiring.
 func TestNonInteractiveFlagPropagatesToContext(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name string
-		args []string
-		want bool
+		name        string
+		args        []string
+		childPreRun bool
+		want        bool
 	}{
-		{"default", []string{"probe"}, false},
-		{"flag set", []string{"--non-interactive", "probe"}, true},
+		{"default", []string{"probe"}, false, false},
+		{"flag set", []string{"--non-interactive", "probe"}, false, true},
+		{"shadowed by child PreRun", []string{"--non-interactive", "probe"}, true, true},
 	}
 
 	for _, tc := range cases {
@@ -37,6 +41,11 @@ func TestNonInteractiveFlagPropagatesToContext(t *testing.T) {
 					got = prompt.IsNonInteractive(cmd.Context())
 					return nil
 				},
+			}
+			if tc.childPreRun {
+				probe.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
+					return nil
+				}
 			}
 
 			root := cli.NewRoot("test")
@@ -54,40 +63,5 @@ func TestNonInteractiveFlagPropagatesToContext(t *testing.T) {
 				t.Fatalf("non-interactive: got %v, want %v", got, tc.want)
 			}
 		})
-	}
-}
-
-// TestWireGlobalsRecoversFromShadowedPreRun verifies a subcommand
-// defining its own PersistentPreRunE can still propagate
-// --non-interactive by calling cli.WireGlobals — guarding the documented
-// contract for future commands that need their own PreRun logic.
-func TestWireGlobalsRecoversFromShadowedPreRun(t *testing.T) {
-	t.Parallel()
-
-	var got bool
-	shadowed := &cobra.Command{
-		Use: "shadowed",
-		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			return cli.WireGlobals(cmd)
-		},
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			got = prompt.IsNonInteractive(cmd.Context())
-			return nil
-		},
-	}
-
-	root := cli.NewRoot("test")
-	root.AddCommand(shadowed)
-
-	var buf bytes.Buffer
-	root.SetOut(&buf)
-	root.SetErr(&buf)
-	root.SetArgs([]string{"--non-interactive", "shadowed"})
-
-	if err := root.ExecuteContext(context.Background()); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if !got {
-		t.Fatal("non-interactive: shadowed PersistentPreRunE failed to propagate flag")
 	}
 }
