@@ -43,8 +43,15 @@ Example — starting a new task:
 Example — committing finished work:
 
     Proposed:
-    git add internal/cli/version.go cmd/opps/main.go tasks/todo.md
+    git add internal/cli/version.go cmd/opps/main.go
     git commit -m "feat(cli): Add opps version subcommand (T01)"
+
+The `tasks/todo.md` checkbox flip is always its own follow-up commit,
+never bundled into the feature commit:
+
+    Proposed:
+    git add tasks/todo.md
+    git commit -m "docs(tasks): Mark T01 complete"
 
 The user replies one of:
 
