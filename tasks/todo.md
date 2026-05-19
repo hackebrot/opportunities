@@ -1,6 +1,6 @@
 # M1 todo
 
-23 tasks across 5 phases. This file is the working checklist; it is
+24 tasks across 5 phases. This file is the working checklist; it is
 committed so it stays in sync with the GitHub issue tracker. The detailed
 task plan (`tasks/plan.md`) and underlying product spec (`SPEC.md`) are
 local-only design docs not committed to this repo.
@@ -26,6 +26,10 @@ local-only design docs not committed to this repo.
 - [x] **T06** (#6) — Prompt harness (`internal/prompt`): huh wrappers,
       `PickEntity`, `PickOrCreate` (inline-create branch), `--non-interactive`
       global flag.
+- [x] **T24** (#32) — `opps config path` subcommand
+      (`internal/cli/config.go`): print absolute path of the resolved
+      config file to stdout. Minimal scope to satisfy Checkpoint A;
+      `opps config get` and related forms remain in T22.
 
 **Checkpoint A** — foundation: CI green on every PR; build, lint, test, int
 all green; `opps version`, `opps db migrate up`, `opps config path` all work.

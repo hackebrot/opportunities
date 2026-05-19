@@ -183,10 +183,12 @@ func applyEnv(cfg *Config, getenv func(string) string) error {
 }
 
 // DefaultPath returns the conventional config file path:
-// $XDG_CONFIG_HOME/opportunities/config.toml when XDG_CONFIG_HOME is set,
-// otherwise ~/.config/opportunities/config.toml.
+// $XDG_CONFIG_HOME/opportunities/config.toml when XDG_CONFIG_HOME is set
+// to an absolute path, otherwise ~/.config/opportunities/config.toml.
+// Per the XDG Base Directory spec, a non-absolute XDG_CONFIG_HOME is
+// invalid and is ignored.
 func DefaultPath() (string, error) {
-	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
+	if x := os.Getenv("XDG_CONFIG_HOME"); filepath.IsAbs(x) {
 		return filepath.Join(x, "opportunities", "config.toml"), nil
 	}
 	home, err := os.UserHomeDir()
