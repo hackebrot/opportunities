@@ -36,7 +36,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
 
 ## M1/P2 — Companies + Contacts
 
-- [ ] **T07** (#7) — Companies model + store: `internal/model.Company`,
+- [x] **T07** (#7) — Companies model + store: `internal/model.Company`,
       `internal/store/companies.go` with `Create/Get/List/Update/Delete`,
       `pgx.PgError` → sentinel translation in store.
 - [ ] **T08** (#8) — Companies service + slug + reusable `prompt.AddCompany`:
