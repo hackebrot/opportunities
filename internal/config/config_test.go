@@ -269,32 +269,44 @@ func TestLoadFromHTTPPortBoundaries(t *testing.T) {
 	}
 }
 
-func TestDefaultPathHonorsXDG(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg")
-	t.Setenv("HOME", "/home/user")
-	want := filepath.Join("/tmp/xdg", "opportunities", "config.toml")
-
-	got, err := config.DefaultPath()
-	if err != nil {
-		t.Fatalf("DefaultPath: %v", err)
+// Per the XDG Base Directory spec, a non-absolute XDG_CONFIG_HOME is
+// invalid and must be ignored; we fall back to $HOME/.config rather
+// than resolving the relative path against cwd.
+func TestDefaultPath(t *testing.T) {
+	tests := map[string]struct {
+		xdg  string
+		home string
+		want string
+	}{
+		"honors absolute XDG_CONFIG_HOME": {
+			xdg:  "/tmp/xdg",
+			home: "/home/user",
+			want: filepath.Join("/tmp/xdg", "opportunities", "config.toml"),
+		},
+		"falls back to home when XDG unset": {
+			xdg:  "",
+			home: "/home/user",
+			want: filepath.Join("/home/user", ".config", "opportunities", "config.toml"),
+		},
+		"ignores relative XDG_CONFIG_HOME": {
+			xdg:  "relative/dir",
+			home: "/home/user",
+			want: filepath.Join("/home/user", ".config", "opportunities", "config.toml"),
+		},
 	}
 
-	if got != want {
-		t.Errorf("DefaultPath: got %q, want %q", got, want)
-	}
-}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", tc.xdg)
+			t.Setenv("HOME", tc.home)
 
-func TestDefaultPathFallsBackToHome(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", "")
-	t.Setenv("HOME", "/home/user")
-	want := filepath.Join("/home/user", ".config", "opportunities", "config.toml")
-
-	got, err := config.DefaultPath()
-	if err != nil {
-		t.Fatalf("DefaultPath: %v", err)
-	}
-
-	if got != want {
-		t.Errorf("DefaultPath: got %q, want %q", got, want)
+			got, err := config.DefaultPath()
+			if err != nil {
+				t.Fatalf("DefaultPath: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("DefaultPath: got %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
