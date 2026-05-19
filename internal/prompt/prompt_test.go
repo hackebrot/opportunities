@@ -87,7 +87,7 @@ func TestPickEntityInteractiveReturnsPickerResult(t *testing.T) {
 	}
 }
 
-func TestPickEntityNonInteractiveMultipleErrors(t *testing.T) {
+func TestPickEntityMultipleNonInteractiveReturnsErrNonInteractive(t *testing.T) {
 	t.Parallel()
 
 	ctx := prompt.WithNonInteractive(context.Background(), true)
@@ -130,7 +130,7 @@ func TestPickOrCreateSelectsExisting(t *testing.T) {
 	}
 }
 
-func TestPickOrCreateInvokesCreate(t *testing.T) {
+func TestPickOrCreateNewKeyInvokesCreate(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubInterface{selectKey: prompt.NewItemKey}
