@@ -23,7 +23,7 @@ local-only design docs not committed to this repo.
       partial unique index, composite FK on `events` (with `(opportunity_id,
       id)` unique on apps), all CHECKs. `internal/cli/db.go`: `opps db
       migrate up | down | status | redo`, `opps db reset --yes`.
-- [ ] **T06** (#6) — Prompt harness (`internal/prompt`): huh wrappers,
+- [x] **T06** (#6) — Prompt harness (`internal/prompt`): huh wrappers,
       `PickEntity`, `PickOrCreate` (inline-create branch), `--non-interactive`
       global flag.
 

@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/hackebrot/opportunities/internal/cli"
+	"github.com/hackebrot/opportunities/internal/prompt"
 )
 
 // version is overridden at build time via:
@@ -23,6 +24,8 @@ func main() {
 	// the pool mid-flight.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	ctx = prompt.WithInterface(ctx, prompt.Huh{})
 
 	if err := cli.NewRoot(version).ExecuteContext(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "opps:", err)
