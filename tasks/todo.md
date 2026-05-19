@@ -26,7 +26,7 @@ local-only design docs not committed to this repo.
 - [x] **T06** (#6) — Prompt harness (`internal/prompt`): huh wrappers,
       `PickEntity`, `PickOrCreate` (inline-create branch), `--non-interactive`
       global flag.
-- [ ] **T24** (#32) — `opps config path` subcommand
+- [x] **T24** (#32) — `opps config path` subcommand
       (`internal/cli/config.go`): print absolute path of the resolved
       config file to stdout. Minimal scope to satisfy Checkpoint A;
       `opps config get` and related forms remain in T22.
