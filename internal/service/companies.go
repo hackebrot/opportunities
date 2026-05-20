@@ -20,18 +20,19 @@ type CompanyInput struct {
 	Notes          string
 }
 
-// Validate reports whether the input is acceptable. Name must be
-// non-empty after trim AND must yield a non-empty slug. Validate is
-// the single pre-flight gate — if it returns nil, Create/Update will
-// not reject the input on validation grounds.
-func (in CompanyInput) Validate() error {
-	if strings.TrimSpace(in.Name) == "" {
-		return fmt.Errorf("%w: name is required", ErrValidation)
+// normalize trims Name, derives the slug, and validates both. Returns
+// ErrValidation if Name is empty after trim or produces an empty slug.
+// Single derivation path used by CreateCompany/UpdateCompany.
+func (in CompanyInput) normalize() (name, slug string, err error) {
+	name = strings.TrimSpace(in.Name)
+	if name == "" {
+		return "", "", fmt.Errorf("%w: name is required", ErrValidation)
 	}
-	if _, err := Slug(in.Name); err != nil {
-		return err
+	slug, err = Slug(in.Name)
+	if err != nil {
+		return "", "", err
 	}
-	return nil
+	return name, slug, nil
 }
 
 // Slug renders a company name into the canonical slug form: lowercase,
@@ -55,15 +56,12 @@ func Slug(name string) (string, error) {
 
 // CreateCompany validates input, generates a slug, and persists.
 func (s *Service) CreateCompany(ctx context.Context, in CompanyInput) (model.Company, error) {
-	if err := in.Validate(); err != nil {
-		return model.Company{}, err
-	}
-	slug, err := Slug(in.Name)
+	name, slug, err := in.normalize()
 	if err != nil {
 		return model.Company{}, err
 	}
 	return s.store.CreateCompany(ctx, store.CompanyParams{
-		Name:           strings.TrimSpace(in.Name),
+		Name:           name,
 		Slug:           slug,
 		Website:        in.Website,
 		CareersURL:     in.CareersURL,
@@ -74,15 +72,12 @@ func (s *Service) CreateCompany(ctx context.Context, in CompanyInput) (model.Com
 
 // UpdateCompany re-derives the slug from the new name and persists.
 func (s *Service) UpdateCompany(ctx context.Context, id string, in CompanyInput) (model.Company, error) {
-	if err := in.Validate(); err != nil {
-		return model.Company{}, err
-	}
-	slug, err := Slug(in.Name)
+	name, slug, err := in.normalize()
 	if err != nil {
 		return model.Company{}, err
 	}
 	return s.store.UpdateCompany(ctx, id, store.CompanyParams{
-		Name:           strings.TrimSpace(in.Name),
+		Name:           name,
 		Slug:           slug,
 		Website:        in.Website,
 		CareersURL:     in.CareersURL,

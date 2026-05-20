@@ -1,10 +1,8 @@
-package service_test
+package service
 
 import (
 	"errors"
 	"testing"
-
-	"github.com/hackebrot/opportunities/internal/service"
 )
 
 func TestSlug(t *testing.T) {
@@ -32,12 +30,12 @@ func TestSlug(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := service.Slug(tt.in)
+			got, err := Slug(tt.in)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("Slug(%q): want error, got %q", tt.in, got)
 				}
-				if !errors.Is(err, service.ErrValidation) {
+				if !errors.Is(err, ErrValidation) {
 					t.Fatalf("Slug(%q): err=%v, want ErrValidation", tt.in, err)
 				}
 				return
@@ -52,39 +50,57 @@ func TestSlug(t *testing.T) {
 	}
 }
 
-func TestValidateCompanyInput(t *testing.T) {
+func TestNormalize(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		in      service.CompanyInput
-		wantErr bool
+		name     string
+		in       CompanyInput
+		wantName string
+		wantSlug string
+		wantErr  bool
 	}{
-		{"valid minimal", service.CompanyInput{Name: "Foo"}, false},
-		{"valid full", service.CompanyInput{
-			Name: "Foo Corp", Website: "https://foo.test",
-			CareersURL: "https://foo.test/careers", Notes: "hi",
-		}, false},
-		{"empty name", service.CompanyInput{Name: ""}, true},
-		{"whitespace name", service.CompanyInput{Name: "   "}, true},
-		{"all punctuation name (slug fails)", service.CompanyInput{Name: "!!!"}, true},
+		{
+			name:     "valid minimal",
+			in:       CompanyInput{Name: "Foo"},
+			wantName: "Foo",
+			wantSlug: "foo",
+		},
+		{
+			name: "valid full trims name",
+			in: CompanyInput{
+				Name: "  Foo Corp  ", Website: "https://foo.test",
+				CareersURL: "https://foo.test/careers", Notes: "hi",
+			},
+			wantName: "Foo Corp",
+			wantSlug: "foocorp",
+		},
+		{"empty name", CompanyInput{Name: ""}, "", "", true},
+		{"whitespace name", CompanyInput{Name: "   "}, "", "", true},
+		{"all punctuation name (slug fails)", CompanyInput{Name: "!!!"}, "", "", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			err := tt.in.Validate()
+			name, slug, err := tt.in.normalize()
 			if tt.wantErr {
 				if err == nil {
-					t.Fatalf("Validate(%+v): want error", tt.in)
+					t.Fatalf("normalize(%+v): want error", tt.in)
 				}
-				if !errors.Is(err, service.ErrValidation) {
-					t.Fatalf("Validate(%+v): err=%v, want ErrValidation", tt.in, err)
+				if !errors.Is(err, ErrValidation) {
+					t.Fatalf("normalize(%+v): err=%v, want ErrValidation", tt.in, err)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("Validate(%+v): unexpected error: %v", tt.in, err)
+				t.Fatalf("normalize(%+v): unexpected error: %v", tt.in, err)
+			}
+			if name != tt.wantName {
+				t.Fatalf("normalize name = %q, want %q", name, tt.wantName)
+			}
+			if slug != tt.wantSlug {
+				t.Fatalf("normalize slug = %q, want %q", slug, tt.wantSlug)
 			}
 		})
 	}
