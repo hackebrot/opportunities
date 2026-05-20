@@ -39,7 +39,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
 - [x] **T07** (#7) — Companies model + store: `internal/model.Company`,
       `internal/store/companies.go` with `Create/Get/List/Update/Delete`,
       `pgx.PgError` → sentinel translation in store.
-- [ ] **T08** (#8) — Companies service + slug + reusable `prompt.AddCompany`:
+- [x] **T08** (#8) — Companies service + slug + reusable `prompt.AddCompany`:
       slug rules from spec, unit-tested edge cases. The prompt is callable
       from inline-create branches.
 - [ ] **T09** (#9) — Companies CLI: `opps add|list|show|update|rm company`,
@@ -56,6 +56,8 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
 - [ ] **T11** (#11) — Opportunity model + store + create flow:
       `Create/Get/List/Update/Delete`, `SetLatestStatus` helper.
       `service.AddOpportunity` writes opp + `added` event in one tx.
+      When this lands, address #36 (extract shared Postgres
+      testcontainer helper — third caller makes the refactor worth it).
 - [ ] **T12** (#12) — Events engine (opportunity-only kinds):
       `service.AppendEvent` for `added`/`exploring`/`archived`/`note`/
       `follow_up`/`custom`/`declined`-without-app.
