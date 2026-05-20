@@ -39,7 +39,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
 - [x] **T07** (#7) — Companies model + store: `internal/model.Company`,
       `internal/store/companies.go` with `Create/Get/List/Update/Delete`,
       `pgx.PgError` → sentinel translation in store.
-- [ ] **T08** (#8) — Companies service + slug + reusable `prompt.AddCompany`:
+- [x] **T08** (#8) — Companies service + slug + reusable `prompt.AddCompany`:
       slug rules from spec, unit-tested edge cases. The prompt is callable
       from inline-create branches.
 - [ ] **T09** (#9) — Companies CLI: `opps add|list|show|update|rm company`,
