@@ -11,13 +11,17 @@ import (
 // Wrapped with %w so callers can errors.Is(err, ErrValidation).
 var ErrValidation = errors.New("service: invalid input")
 
-// Service wraps the persistence layer with business logic. A nil pointer
-// is not valid; construct with New.
+// Service wraps the persistence layer with business logic. Construct
+// with New.
 type Service struct {
 	store *store.Store
 }
 
-// New returns a Service backed by s.
+// New returns a Service backed by s. Panics if s is nil — passing nil
+// is a programmer error caught at startup, not a runtime condition.
 func New(s *store.Store) *Service {
+	if s == nil {
+		panic("service: New called with nil *store.Store")
+	}
 	return &Service{store: s}
 }
