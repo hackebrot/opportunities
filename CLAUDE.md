@@ -19,8 +19,8 @@ zero/empty/placeholder values; users supply real numbers in their local
 `config.toml`. Generic structural choices (currency code, locale,
 `example.com` placeholders) are fine.
 
-CLI grammar is noun-first: `opps <entity> <verb>` (e.g. `opps company
-create`, not `opps add company`). Each entity parent carries a plural
+CLI grammar is noun-first: `opps <entity> <verb>` — e.g.
+`opps company create`, not `opps add company`. Each entity parent carries a plural
 alias (`opps companies list` works). Top-level verbs are reserved for
 app-level operations (`opps version`, `opps db ...`, `opps config ...`,
 `opps server`, `opps dashboard`, `opps report`, `opps export`) plus a
