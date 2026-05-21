@@ -48,6 +48,7 @@ func NewRoot(version string) *cobra.Command {
 	root.AddCommand(newVersionCmd(version))
 	root.AddCommand(newDBCmd())
 	root.AddCommand(newConfigCmd())
+	root.AddCommand(newCompanyCmd())
 
 	return root
 }

@@ -75,11 +75,11 @@ func newDBResetCmd() *cobra.Command {
 func openStoreFromConfig(cmd *cobra.Command) (*store.Store, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		return nil, fmt.Errorf("db: load config: %w", err)
+		return nil, fmt.Errorf("load config: %w", err)
 	}
 	s, err := store.Open(cmd.Context(), cfg.Database.URL)
 	if err != nil {
-		return nil, fmt.Errorf("db: open store: %w", err)
+		return nil, fmt.Errorf("open store: %w", err)
 	}
 	return s, nil
 }
