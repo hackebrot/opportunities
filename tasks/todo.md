@@ -42,7 +42,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
 - [x] **T08** (#8) — Companies service + slug + reusable `prompt.AddCompany`:
       slug rules from spec, unit-tested edge cases. The prompt is callable
       from inline-create branches.
-- [ ] **T09** (#9) — Companies CLI: noun-first `opps company` parent with
+- [x] **T09** (#9) — Companies CLI: noun-first `opps company` parent with
       `create|list|show|update|rm` subcommands (plural alias
       `companies`); `--json` on read commands. Unit + int + e2e verification.
 - [ ] **T10** (#10) — Contacts: full vertical (model + store + service +
