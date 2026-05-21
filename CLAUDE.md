@@ -19,6 +19,16 @@ zero/empty/placeholder values; users supply real numbers in their local
 `config.toml`. Generic structural choices (currency code, locale,
 `example.com` placeholders) are fine.
 
+CLI grammar is noun-first: `opps <entity> <verb>` (e.g. `opps company
+create`, not `opps add company`). Each entity parent carries a plural
+alias (`opps companies list` works). Top-level verbs are reserved for
+app-level operations (`opps version`, `opps db ...`, `opps config ...`,
+`opps server`, `opps dashboard`, `opps report`, `opps export`) plus a
+fixed set of high-frequency state-transition shortcuts justified by
+specific user stories: `opps apply`, `opps note`, `opps follow-up`. The
+shortcuts are aliases over the canonical noun-first form; the canonical
+form is preferred in docs and `--help` output.
+
 ## Project documents
 
 | Document        | In git? | When to read                              |
