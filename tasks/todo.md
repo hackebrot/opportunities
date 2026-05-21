@@ -42,8 +42,9 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
 - [x] **T08** (#8) — Companies service + slug + reusable `prompt.AddCompany`:
       slug rules from spec, unit-tested edge cases. The prompt is callable
       from inline-create branches.
-- [ ] **T09** (#9) — Companies CLI: `opps add|list|show|update|rm company`,
-      `--json`. Unit + int + e2e verification.
+- [ ] **T09** (#9) — Companies CLI: noun-first `opps company` parent with
+      `create|list|show|update|rm` subcommands (plural alias
+      `companies`); `--json` on read commands. Unit + int + e2e verification.
 - [ ] **T10** (#10) — Contacts: full vertical (model + store + service +
       reusable `prompt.AddContact` + CLI). Nullable company FK; default
       company prepop when called inline.
@@ -65,12 +66,14 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
       Comprehensive table-driven unit tests.
 - [ ] **T13** (#13) — Opportunity prompts + CLI with inline-create:
       `prompt.AddOpportunity` uses `PickOrCreate` for company *and*
-      contact; all inserts in one tx. CLI: `add | list | show | update |
-      rm | archive | note | event add` (M1 kinds only). The
-      "recruiter messaged me" scenario becomes one command.
-- [ ] **T14** (#14) — `opps attach contact` / `opps detach contact`: secondary
-      path for adjusting links after creation. `--as <relationship>`
-      required on detach (PK-driven).
+      contact; all inserts in one tx. CLI: `opps opportunity`
+      parent with `create | list | show | update | rm | archive | note |
+      event create` subcommands (M1 kinds only). The "recruiter messaged
+      me" scenario becomes one command.
+- [ ] **T14** (#14) — `opps opportunity contact attach` /
+      `opps opportunity contact detach`: secondary path for adjusting
+      links after creation. `--as <relationship>` required on detach
+      (PK-driven).
 
 **Checkpoint C** — US3, US9, US10, US13, static US14/US17 covered;
 `latest_status` flips correctly; one-command inbound recruiter capture.
@@ -84,16 +87,19 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
       the transition table (interview kinds, offer/counter, accepted,
       rejected/declined/withdrawn with `archive_reason_category`).
       Table-driven tests; `archived_at = events.occurred_at` mirroring.
-- [ ] **T17** (#17) — `opps apply` shortcut + `opps event add` app-scoped
-      contextual menu.
-- [ ] **T18** (#18) — `opps follow-up [<application-id>] [--blocked] [--done]`:
-      no-flag = stamp `last_followed_up_at`; `--blocked` = suppress
-      future staleness alerts; `--done` = clear block + restamp.
-- [ ] **T19** (#19) — Application prompts + CRUD CLI: `opps add application`
-      (full from-scratch with chained inline-create through opportunity),
-      `list`, `show`, `update`, `rm`.
+- [ ] **T17** (#17) — `opps opportunity apply` + `opps opportunity event
+      create` app-scoped contextual menu. Top-level `opps apply`
+      registered as alias.
+- [ ] **T18** (#18) — `opps application follow-up [<id>] [--blocked] [--done]`
+      (top-level `opps follow-up` as alias): no-flag = stamp
+      `last_followed_up_at`; `--blocked` = suppress future staleness
+      alerts; `--done` = clear block + restamp.
+- [ ] **T19** (#19) — Application prompts + CRUD CLI: noun-first
+      `opps application` parent with `create` (full from-scratch with
+      chained inline-create through opportunity), `list`, `show`,
+      `update`, `rm`.
 - [ ] **T20** (#20) — Compensation & application_stages stubs: tables exist,
-      store-layer CRUD scaffolded, `opps show` reads them. No CLI commands.
+      store-layer CRUD scaffolded, `opps <entity> show` reads them. No CLI commands.
 
 **Checkpoint D** — US1, US2, US8, US10 covered; all spec invariants
 tested; partial-index race regression in place.
@@ -101,8 +107,8 @@ tested; partial-index race regression in place.
 ## M1/P5 — Polish & Release
 
 - [ ] **T21** (#21) — Edge polish: `--status`/`--company`/`--archived` filters
-      on `list opportunities`/`list applications`; `--json` everywhere;
-      full `--non-interactive` discipline (US5 contract).
+      on `opps opportunity list` / `opps application list`; `--json`
+      everywhere; full `--non-interactive` discipline (US5 contract).
 - [ ] **T22** (#22) — `opps config get`, `opps config get <dotted.key>`,
       `opps config path`. Verify `opps version` build-flag wiring through CI.
 - [ ] **T23** (#23) — Tag `v0.1.0`: CI green on merge commit; manual smoke run

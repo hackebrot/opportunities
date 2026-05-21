@@ -1,5 +1,11 @@
 // Package cli wires cobra commands and delegates business logic to
 // internal/service. Commands live in sibling files (one per aggregate).
+//
+// CLI grammar is noun-first: top-level commands are entities
+// (`opps company`, `opps contact`, …) with CRUD verbs as subcommands
+// (`create`, `list`, `show`, `update`, `rm`). Top-level verbs are
+// reserved for app-level operations (`version`, `db`, `config`, …) and
+// a small fixed set of user-story-justified shortcut aliases.
 package cli
 
 import (
