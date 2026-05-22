@@ -129,6 +129,12 @@ func TestIntegrationCompanyCRUDViaCLI(t *testing.T) {
 	if _, err := tryRun(ctx, t, "--non-interactive", "company", "create"); !errors.Is(err, prompt.ErrNonInteractive) {
 		t.Fatalf("add without --name in non-interactive: err=%v, want ErrNonInteractive", err)
 	}
+
+	// add company with a malformed website → service validation rejects
+	// it through the CLI rather than persisting garbage.
+	if _, err := tryRun(ctx, t, "--non-interactive", "company", "create", "--name", "Bad URL Co", "--website", "not-a-url"); err == nil {
+		t.Fatal("create with malformed website: expected error")
+	}
 }
 
 type companyJSONShape struct {
