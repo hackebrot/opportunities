@@ -94,6 +94,15 @@ func TestPrintCompaniesTableHeader(t *testing.T) {
 	}
 }
 
+func TestOneline(t *testing.T) {
+	t.Parallel()
+
+	got := oneline("a\nb\tc\rd")
+	if want := "a b c d"; got != want {
+		t.Fatalf("oneline: got %q, want %q", got, want)
+	}
+}
+
 func TestCompanyInputFromModelDereferencesEmail(t *testing.T) {
 	t.Parallel()
 

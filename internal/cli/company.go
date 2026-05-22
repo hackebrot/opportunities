@@ -309,10 +309,12 @@ func printCompany(w io.Writer, c model.Company, asJSON bool) error {
 	return tw.Flush()
 }
 
-// oneline collapses newlines to spaces so a multi-line field can't break
-// the tabwriter's column alignment.
+// oneline collapses newlines, carriage returns, and tabs to spaces. Tabs
+// are the tabwriter's cell separator, so an embedded one would inject a
+// phantom column; newlines would break the row. Stripping all three keeps
+// a free-form field from corrupting the table layout.
 func oneline(s string) string {
-	return strings.ReplaceAll(s, "\n", " ")
+	return strings.NewReplacer("\n", " ", "\r", " ", "\t", " ").Replace(s)
 }
 
 func printCompanies(w io.Writer, items []model.Company, asJSON bool) error {
