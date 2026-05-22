@@ -237,6 +237,9 @@ func resolveCompany(ctx context.Context, svc *service.Service, args []string) (m
 	)
 }
 
+// companyInputFromModel seeds an update with the company's current
+// values so unchanged flags round-trip. Slug is intentionally omitted —
+// the service re-derives it from Name on every UpdateCompany.
 func companyInputFromModel(c model.Company) service.CompanyInput {
 	in := service.CompanyInput{
 		Name:       c.Name,
@@ -288,12 +291,14 @@ func printCompany(w io.Writer, c model.Company, asJSON bool) error {
 	}
 	rows := [][2]string{
 		{"ID", c.ID},
-		{"Name", c.Name},
+		{"Name", oneline(c.Name)},
 		{"Slug", c.Slug},
-		{"Website", c.Website},
-		{"Careers URL", c.CareersURL},
-		{"Preferred email", email},
-		{"Notes", strings.ReplaceAll(c.Notes, "\n", " ")},
+		{"Website", oneline(c.Website)},
+		{"Careers URL", oneline(c.CareersURL)},
+		{"Preferred email", oneline(email)},
+		{"Notes", oneline(c.Notes)},
+		{"Created", c.CreatedAt.UTC().Format(time.RFC3339)},
+		{"Updated", c.UpdatedAt.UTC().Format(time.RFC3339)},
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, r := range rows {
@@ -302,6 +307,12 @@ func printCompany(w io.Writer, c model.Company, asJSON bool) error {
 		}
 	}
 	return tw.Flush()
+}
+
+// oneline collapses newlines to spaces so a multi-line field can't break
+// the tabwriter's column alignment.
+func oneline(s string) string {
+	return strings.ReplaceAll(s, "\n", " ")
 }
 
 func printCompanies(w io.Writer, items []model.Company, asJSON bool) error {
@@ -317,7 +328,7 @@ func printCompanies(w io.Writer, items []model.Company, asJSON bool) error {
 		return err
 	}
 	for _, c := range items {
-		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", c.ID, c.Name, c.Slug, c.Website); err != nil {
+		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", c.ID, oneline(c.Name), c.Slug, oneline(c.Website)); err != nil {
 			return err
 		}
 	}
