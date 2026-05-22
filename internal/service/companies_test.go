@@ -85,6 +85,7 @@ func TestNormalize(t *testing.T) {
 			wantSlug: "foo",
 		},
 		{"invalid preferred email", CompanyInput{Name: "Foo", PreferredEmail: "not an email"}, "", "", true},
+		{"preferred email with display name", CompanyInput{Name: "Foo", PreferredEmail: "Bob <bob@b.test>"}, "", "", true},
 		{"invalid website missing scheme", CompanyInput{Name: "Foo", Website: "foo.test"}, "", "", true},
 		{"invalid website non-http scheme", CompanyInput{Name: "Foo", Website: "ftp://foo.test"}, "", "", true},
 		{"invalid careers url missing host", CompanyInput{Name: "Foo", CareersURL: "https://"}, "", "", true},

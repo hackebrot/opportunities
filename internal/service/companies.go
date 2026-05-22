@@ -47,13 +47,16 @@ func (in CompanyInput) normalize() (name, slug string, err error) {
 	return name, slug, nil
 }
 
-// validateEmail rejects a non-empty address that does not parse as a
-// single RFC 5322 mailbox. Empty is allowed (the field is optional).
+// validateEmail rejects a non-empty value that is not a bare RFC 5322
+// address. Display-name forms ("Bob <bob@x.test>") parse but are not a
+// usable reply-to override, so require the parsed address to equal the
+// input. Empty is allowed (the field is optional).
 func validateEmail(s string) error {
 	if s == "" {
 		return nil
 	}
-	if _, err := mail.ParseAddress(s); err != nil {
+	addr, err := mail.ParseAddress(s)
+	if err != nil || addr.Address != s {
 		return fmt.Errorf("%w: invalid email %q", ErrValidation, s)
 	}
 	return nil
