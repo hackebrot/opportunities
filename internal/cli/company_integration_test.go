@@ -108,6 +108,14 @@ func TestIntegrationCompanyCRUDViaCLI(t *testing.T) {
 		t.Fatalf("clear preferred_email: unrelated rename overwritten: got %q", cleared.Name)
 	}
 
+	// rm without --yes must error in non-interactive mode: the
+	// confirmation prompt returns ErrNonInteractive rather than silently
+	// dropping rows. Checked while the company still exists, so the error
+	// is the confirmation path and not a not-found.
+	if _, err := tryRun(ctx, t, "--non-interactive", "company", "rm", id); !errors.Is(err, prompt.ErrNonInteractive) {
+		t.Fatalf("rm without --yes in non-interactive: err=%v, want ErrNonInteractive", err)
+	}
+
 	// rm company --yes
 	if _, err := tryRun(ctx, t, "company", "rm", id, "--yes"); err != nil {
 		t.Fatalf("rm company: %v", err)
@@ -117,12 +125,6 @@ func TestIntegrationCompanyCRUDViaCLI(t *testing.T) {
 	emptyOut = strings.TrimSpace(emptyOut)
 	if emptyOut != "null" && emptyOut != "[]" {
 		t.Fatalf("list after rm: want null/[], got %q", emptyOut)
-	}
-
-	// rm company without --yes errors in non-interactive mode (Confirm
-	// returns ErrNonInteractive) rather than silently dropping rows.
-	if _, err := tryRun(ctx, t, "--non-interactive", "company", "rm", id); err == nil {
-		t.Fatal("rm without --yes in non-interactive: expected error")
 	}
 
 	// add company with no name and no prompts → must error.
