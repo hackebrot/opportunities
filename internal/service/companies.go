@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"net/mail"
+	"net/url"
 	"strings"
 
 	"github.com/hackebrot/opportunities/internal/model"
@@ -20,8 +22,9 @@ type CompanyInput struct {
 	Notes          string
 }
 
-// normalize trims Name, derives the slug, and validates both. Returns
-// ErrValidation if Name is empty after trim or produces an empty slug.
+// normalize trims Name, derives the slug, and validates the input.
+// Returns ErrValidation if Name is empty after trim or produces an empty
+// slug, or if a non-empty PreferredEmail/Website/CareersURL is malformed.
 // Single derivation path used by CreateCompany/UpdateCompany.
 func (in CompanyInput) normalize() (name, slug string, err error) {
 	name = strings.TrimSpace(in.Name)
@@ -32,7 +35,41 @@ func (in CompanyInput) normalize() (name, slug string, err error) {
 	if err != nil {
 		return "", "", err
 	}
+	if err := validateEmail(in.PreferredEmail); err != nil {
+		return "", "", err
+	}
+	if err := validateURL("website", in.Website); err != nil {
+		return "", "", err
+	}
+	if err := validateURL("careers URL", in.CareersURL); err != nil {
+		return "", "", err
+	}
 	return name, slug, nil
+}
+
+// validateEmail rejects a non-empty address that does not parse as a
+// single RFC 5322 mailbox. Empty is allowed (the field is optional).
+func validateEmail(s string) error {
+	if s == "" {
+		return nil
+	}
+	if _, err := mail.ParseAddress(s); err != nil {
+		return fmt.Errorf("%w: invalid email %q", ErrValidation, s)
+	}
+	return nil
+}
+
+// validateURL rejects a non-empty value that is not an absolute http(s)
+// URL with a host. Empty is allowed (the field is optional).
+func validateURL(label, s string) error {
+	if s == "" {
+		return nil
+	}
+	u, err := url.Parse(s)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("%w: invalid %s %q (want an http(s) URL)", ErrValidation, label, s)
+	}
+	return nil
 }
 
 // Slug renders a company name into the canonical slug form: lowercase,
