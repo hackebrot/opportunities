@@ -39,7 +39,7 @@ func TestIntegrationCompanyCRUDViaCLI(t *testing.T) {
 
 	// add company (non-interactive — every value supplied via flags)
 	addOut := runCmd(
-		t, ctx,
+		ctx, t,
 		"--non-interactive", "company", "create",
 		"--name", "Acme Corp",
 		"--website", "https://acme.test",
@@ -54,7 +54,7 @@ func TestIntegrationCompanyCRUDViaCLI(t *testing.T) {
 	}
 
 	// list companies --json
-	listOut := runCmd(t, ctx, "company", "list", "--json")
+	listOut := runCmd(ctx, t, "company", "list", "--json")
 	var listed []map[string]any
 	if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
 		t.Fatalf("list json: %v\n%s", err, listOut)
@@ -64,14 +64,14 @@ func TestIntegrationCompanyCRUDViaCLI(t *testing.T) {
 	}
 
 	// show company <id> --json
-	showOut := runCmd(t, ctx, "company", "show", id, "--json")
+	showOut := runCmd(ctx, t, "company", "show", id, "--json")
 	if decodeCompanyJSON(t, showOut).Name != "Acme Corp" {
 		t.Fatalf("show company: unexpected payload: %s", showOut)
 	}
 
 	// update company — rename
 	updateOut := runCmd(
-		t, ctx,
+		ctx, t,
 		"company", "update", id,
 		"--name", "Acme Corporation",
 		"--json",
@@ -95,7 +95,7 @@ func TestIntegrationCompanyCRUDViaCLI(t *testing.T) {
 	// Clearing preferred_email via an explicit empty flag — the only
 	// path that distinguishes "leave alone" from "overwrite with empty".
 	clearedOut := runCmd(
-		t, ctx,
+		ctx, t,
 		"company", "update", id,
 		"--preferred-email", "",
 		"--json",
@@ -109,11 +109,11 @@ func TestIntegrationCompanyCRUDViaCLI(t *testing.T) {
 	}
 
 	// rm company --yes
-	if _, err := tryRun(t, ctx, "company", "rm", id, "--yes"); err != nil {
+	if _, err := tryRun(ctx, t, "company", "rm", id, "--yes"); err != nil {
 		t.Fatalf("rm company: %v", err)
 	}
 	// list is empty again
-	emptyOut := runCmd(t, ctx, "company", "list", "--json")
+	emptyOut := runCmd(ctx, t, "company", "list", "--json")
 	emptyOut = strings.TrimSpace(emptyOut)
 	if emptyOut != "null" && emptyOut != "[]" {
 		t.Fatalf("list after rm: want null/[], got %q", emptyOut)
@@ -121,12 +121,12 @@ func TestIntegrationCompanyCRUDViaCLI(t *testing.T) {
 
 	// rm company without --yes errors in non-interactive mode (Confirm
 	// returns ErrNonInteractive) rather than silently dropping rows.
-	if _, err := tryRun(t, ctx, "--non-interactive", "company", "rm", id); err == nil {
+	if _, err := tryRun(ctx, t, "--non-interactive", "company", "rm", id); err == nil {
 		t.Fatal("rm without --yes in non-interactive: expected error")
 	}
 
 	// add company with no name and no prompts → must error.
-	if _, err := tryRun(t, ctx, "--non-interactive", "company", "create"); !errors.Is(err, prompt.ErrNonInteractive) {
+	if _, err := tryRun(ctx, t, "--non-interactive", "company", "create"); !errors.Is(err, prompt.ErrNonInteractive) {
 		t.Fatalf("add without --name in non-interactive: err=%v, want ErrNonInteractive", err)
 	}
 }
@@ -150,16 +150,16 @@ func decodeCompanyJSON(t *testing.T, s string) companyJSONShape {
 
 // runCmd executes the root cobra command and fails the test on error.
 // Returns stdout.
-func runCmd(t *testing.T, ctx context.Context, args ...string) string {
+func runCmd(ctx context.Context, t *testing.T, args ...string) string {
 	t.Helper()
-	out, err := tryRun(t, ctx, args...)
+	out, err := tryRun(ctx, t, args...)
 	if err != nil {
 		t.Fatalf("opps %v: %v\n%s", args, err, out)
 	}
 	return out
 }
 
-func tryRun(t *testing.T, ctx context.Context, args ...string) (string, error) {
+func tryRun(ctx context.Context, t *testing.T, args ...string) (string, error) {
 	t.Helper()
 	root := cli.NewRoot("v0.0.0-test")
 	var out bytes.Buffer
