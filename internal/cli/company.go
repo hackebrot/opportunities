@@ -220,8 +220,9 @@ func newCompanyRmCmd() *cobra.Command {
 }
 
 // resolveCompany returns the company identified by args[0] when present;
-// otherwise it prompts the user to pick one. In non-interactive mode an
-// explicit id is required.
+// otherwise it picks one via prompt.PickEntity, which auto-selects when
+// exactly one company exists and, in non-interactive mode, requires an
+// explicit id only when more than one would be ambiguous.
 func resolveCompany(ctx context.Context, svc *service.Service, args []string) (model.Company, error) {
 	if len(args) == 1 {
 		return svc.GetCompany(ctx, args[0])
