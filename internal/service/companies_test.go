@@ -78,6 +78,17 @@ func TestNormalize(t *testing.T) {
 		{"empty name", CompanyInput{Name: ""}, "", "", true},
 		{"whitespace name", CompanyInput{Name: "   "}, "", "", true},
 		{"all punctuation name (slug fails)", CompanyInput{Name: "!!!"}, "", "", true},
+		{
+			name:     "valid preferred email",
+			in:       CompanyInput{Name: "Foo", PreferredEmail: "a@b.test"},
+			wantName: "Foo",
+			wantSlug: "foo",
+		},
+		{"invalid preferred email", CompanyInput{Name: "Foo", PreferredEmail: "not an email"}, "", "", true},
+		{"preferred email with display name", CompanyInput{Name: "Foo", PreferredEmail: "Bob <bob@b.test>"}, "", "", true},
+		{"invalid website missing scheme", CompanyInput{Name: "Foo", Website: "foo.test"}, "", "", true},
+		{"invalid website non-http scheme", CompanyInput{Name: "Foo", Website: "ftp://foo.test"}, "", "", true},
+		{"invalid careers url missing host", CompanyInput{Name: "Foo", CareersURL: "https://"}, "", "", true},
 	}
 
 	for _, tt := range tests {
