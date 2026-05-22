@@ -1,6 +1,6 @@
 # M1 todo
 
-24 tasks across 5 phases. This file is the working checklist; it is
+25 tasks across 5 phases. This file is the working checklist; it is
 committed so it stays in sync with the GitHub issue tracker. The detailed
 task plan (`tasks/plan.md`) and underlying product spec (`SPEC.md`) are
 local-only design docs not committed to this repo.
@@ -111,6 +111,12 @@ tested; partial-index race regression in place.
       everywhere; full `--non-interactive` discipline (US5 contract).
 - [ ] **T22** (#22) — `opps config get`, `opps config get <dotted.key>`,
       `opps config path`. Verify `opps version` build-flag wiring through CI.
+- [ ] **T25** (#39) — Interactive `update` flow: prompt for editable current
+      values when `update` runs interactively without field flags, across all
+      entities (company, contact, opportunity, application). Requires a
+      `prompt` helper for text input with a prefilled default. Explicit
+      `--field` flags still skip prompts; `--non-interactive` no-flag update
+      behaves predictably (no-op or error — decide when building).
 - [ ] **T23** (#23) — Tag `v0.1.0`: CI green on merge commit; manual smoke run
       covering every exit-gate user story; `git tag v0.1.0`.
 
