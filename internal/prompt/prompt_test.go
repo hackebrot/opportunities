@@ -248,3 +248,67 @@ func TestPickOrCreateRejectsCollidingKey(t *testing.T) {
 		t.Fatal("PickOrCreate: expected collision error, got nil")
 	}
 }
+
+func TestPickOptionalNonInteractiveReturnsNone(t *testing.T) {
+	t.Parallel()
+
+	ctx := prompt.WithNonInteractive(context.Background(), true)
+	items := []item{{id: "1", name: "a"}, {id: "2", name: "b"}}
+	_, selected, err := prompt.PickOptional(ctx, "Pick", items, itemDisplay, itemKey)
+	if err != nil {
+		t.Fatalf("PickOptional: %v", err)
+	}
+	if selected {
+		t.Fatalf("non-interactive: selected = true, want false")
+	}
+}
+
+func TestPickOptionalEmptyReturnsNone(t *testing.T) {
+	t.Parallel()
+
+	ctx := prompt.WithInterface(context.Background(), &stubInterface{})
+	_, selected, err := prompt.PickOptional[item](ctx, "Pick", nil, itemDisplay, itemKey)
+	if err != nil {
+		t.Fatalf("PickOptional: %v", err)
+	}
+	if selected {
+		t.Fatalf("empty items: selected = true, want false")
+	}
+}
+
+func TestPickOptionalSelectsNone(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubInterface{selectKey: prompt.NoneKey}
+	ctx := prompt.WithInterface(context.Background(), stub)
+	items := []item{{id: "1", name: "a"}}
+	_, selected, err := prompt.PickOptional(ctx, "Pick", items, itemDisplay, itemKey)
+	if err != nil {
+		t.Fatalf("PickOptional: %v", err)
+	}
+	if selected {
+		t.Fatalf("none selected: selected = true, want false")
+	}
+	// "(none)" must be the first option offered.
+	if len(stub.gotSelect) != 2 || stub.gotSelect[0].Key != prompt.NoneKey {
+		t.Fatalf("options = %+v, want (none) first then one item", stub.gotSelect)
+	}
+}
+
+func TestPickOptionalSelectsItem(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubInterface{selectKey: "2"}
+	ctx := prompt.WithInterface(context.Background(), stub)
+	items := []item{{id: "1", name: "a"}, {id: "2", name: "b"}}
+	got, selected, err := prompt.PickOptional(ctx, "Pick", items, itemDisplay, itemKey)
+	if err != nil {
+		t.Fatalf("PickOptional: %v", err)
+	}
+	if !selected {
+		t.Fatalf("item selected: selected = false, want true")
+	}
+	if got.id != "2" {
+		t.Fatalf("selected id = %q, want 2", got.id)
+	}
+}
