@@ -49,6 +49,7 @@ func NewRoot(version string) *cobra.Command {
 	root.AddCommand(newDBCmd())
 	root.AddCommand(newConfigCmd())
 	root.AddCommand(newCompanyCmd())
+	root.AddCommand(newContactCmd())
 
 	return root
 }
