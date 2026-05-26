@@ -157,8 +157,9 @@ func translateContactErr(op string, err error) error {
 	}
 	var pg *pgconn.PgError
 	if errors.As(err, &pg) && pg.Code == pgForeignKeyViolation {
-		// company_id pointed at a company that doesn't exist.
-		return ErrNotFound
+		// company_id pointed at a company that doesn't exist. Name the
+		// company so the caller isn't left guessing which entity is missing.
+		return fmt.Errorf("%w: unknown company ID", ErrNotFound)
 	}
 	return fmt.Errorf("store: %s contact: %w", op, err)
 }

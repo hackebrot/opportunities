@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,10 +139,15 @@ func TestIntegrationContactsCompanyFKBehavior(t *testing.T) {
 		t.Fatalf("migrate up: %v", err)
 	}
 
-	// A company_id referencing no company surfaces as ErrNotFound.
+	// A company_id referencing no company surfaces as ErrNotFound, with a
+	// message that names the company so the caller isn't left guessing.
 	ghost := "00000000-0000-0000-0000-000000000000"
-	if _, err := store.CreateContact(ctx, ContactParams{Name: "Carol Example", CompanyID: &ghost}); !errors.Is(err, ErrNotFound) {
+	_, err := store.CreateContact(ctx, ContactParams{Name: "Carol Example", CompanyID: &ghost})
+	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("create with dangling company_id: want ErrNotFound, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "company") {
+		t.Fatalf("dangling company_id error should name the company, got %q", err)
 	}
 
 	// ON DELETE SET NULL: deleting the company nulls the contact's FK.
