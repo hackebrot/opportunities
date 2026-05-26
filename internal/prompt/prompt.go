@@ -11,6 +11,11 @@ import (
 // "[+ New …]" branch. Exposed so callers (and tests) can identify it.
 const NewItemKey = "__opps_new__"
 
+// NoneKey is the synthetic Option.Key emitted by PickOptional for the
+// "(none)" branch — an explicit choice to leave a nullable association
+// unset.
+const NoneKey = "__opps_none__"
+
 // ErrNoItems is returned by PickEntity when the input list is empty.
 // Callers may treat this as a clean "nothing to pick" exit rather than a
 // hard failure.
@@ -138,6 +143,41 @@ func PickOrCreate[T any](
 		return create(ctx)
 	}
 	return findByKey(items, key, k)
+}
+
+// PickOptional selects an item for a nullable association. It prepends a
+// "(none)" option; choosing it returns selected=false. Unlike PickEntity
+// it never auto-selects a sole item — leaving the field unset is always a
+// legitimate answer, so the user is always asked when more than zero items
+// exist. In non-interactive mode it returns selected=false: an optional
+// field simply stays unset without a flag. With zero items it also returns
+// selected=false — there is nothing to attach.
+func PickOptional[T any](ctx context.Context, title string, items []T, display func(T) string, key func(T) string) (item T, selected bool, err error) {
+	var zero T
+	if len(items) == 0 || IsNonInteractive(ctx) {
+		return zero, false, nil
+	}
+	opts := make([]Option, 0, len(items)+1)
+	opts = append(opts, Option{Key: NoneKey, Label: "(none)"})
+	for _, it := range items {
+		k := key(it)
+		if k == NoneKey {
+			return zero, false, fmt.Errorf("prompt: item key %q collides with PickOptional sentinel", k)
+		}
+		opts = append(opts, Option{Key: k, Label: display(it)})
+	}
+	k, err := InterfaceFrom(ctx).Select(title, opts)
+	if err != nil {
+		return zero, false, err
+	}
+	if k == NoneKey {
+		return zero, false, nil
+	}
+	it, err := findByKey(items, key, k)
+	if err != nil {
+		return zero, false, err
+	}
+	return it, true, nil
 }
 
 func findByKey[T any](items []T, key func(T) string, k string) (T, error) {

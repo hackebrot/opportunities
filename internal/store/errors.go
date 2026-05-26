@@ -14,6 +14,10 @@ var (
 	ErrConflict = errors.New("store: conflict")
 )
 
-// pgUniqueViolation is SQLSTATE 23505. Kept as a literal so the store
-// package does not depend on a separate pgerrcode module.
-const pgUniqueViolation = "23505"
+// pgUniqueViolation is SQLSTATE 23505; pgForeignKeyViolation is 23503.
+// Kept as literals so the store package does not depend on a separate
+// pgerrcode module.
+const (
+	pgUniqueViolation     = "23505"
+	pgForeignKeyViolation = "23503"
+)
