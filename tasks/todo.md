@@ -108,7 +108,8 @@ tested; partial-index race regression in place.
 
 - [ ] **T21** (#21) — Edge polish: `--status`/`--company`/`--archived` filters
       on `opps opportunity list` / `opps application list`; `--json`
-      everywhere; full `--non-interactive` discipline (US5 contract).
+      everywhere; full `--non-interactive` discipline (US5 contract);
+      validate FK-reference flags (e.g. `--company`) before prompting.
 - [ ] **T22** (#22) — `opps config get`, `opps config get <dotted.key>`,
       `opps config path`. Verify `opps version` build-flag wiring through CI.
 - [ ] **T25** (#39) — Interactive `update` flow: prompt for editable current
