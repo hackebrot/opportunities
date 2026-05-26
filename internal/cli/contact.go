@@ -251,6 +251,10 @@ func resolveContactCompany(cmd *cobra.Command, svc *service.Service, f contactFl
 	if cmd.Flags().Changed("company") {
 		return nullableFlag(f.company), nil
 	}
+	if prompt.IsNonInteractive(cmd.Context()) {
+		// PickOptional would short-circuit here anyway; skip the list query.
+		return nil, nil
+	}
 	companies, err := svc.ListCompanies(cmd.Context())
 	if err != nil {
 		return nil, err
