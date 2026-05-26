@@ -39,8 +39,7 @@ func (s *Store) CreateContact(ctx context.Context, p ContactParams) (model.Conta
 			RETURNING id, name, email, linkedin, role, company_id, notes,
 				created_at, updated_at
 		)
-		SELECT c.id, c.name, c.email, c.linkedin, c.role, c.company_id,
-			c.notes, c.created_at, c.updated_at, comp.name
+		SELECT ` + contactColumns + `
 		FROM ins c
 		LEFT JOIN companies comp ON comp.id = c.company_id`
 
@@ -113,8 +112,7 @@ func (s *Store) UpdateContact(ctx context.Context, id string, p ContactParams) (
 			RETURNING id, name, email, linkedin, role, company_id, notes,
 				created_at, updated_at
 		)
-		SELECT c.id, c.name, c.email, c.linkedin, c.role, c.company_id,
-			c.notes, c.created_at, c.updated_at, comp.name
+		SELECT ` + contactColumns + `
 		FROM upd c
 		LEFT JOIN companies comp ON comp.id = c.company_id`
 
