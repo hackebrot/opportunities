@@ -124,6 +124,29 @@ func TestContactInputFromModelCarriesCompanyID(t *testing.T) {
 	}
 }
 
+func TestContactPickLabel(t *testing.T) {
+	t.Parallel()
+
+	company := "Acme Corp"
+	empty := ""
+	cases := map[string]struct {
+		contact model.Contact
+		want    string
+	}{
+		"with company":  {model.Contact{Name: "Alice", CompanyName: &company}, "Alice (Acme Corp)"},
+		"no company":    {model.Contact{Name: "Alice"}, "Alice"},
+		"empty company": {model.Contact{Name: "Alice", CompanyName: &empty}, "Alice"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if got := contactPickLabel(tc.contact); got != tc.want {
+				t.Fatalf("contactPickLabel = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestNullableFlag(t *testing.T) {
 	t.Parallel()
 

@@ -269,9 +269,12 @@ func resolveContactCompany(cmd *cobra.Command, svc *service.Service, f contactFl
 	return &c.ID, nil
 }
 
+// contactPickLabel follows the picker convention used across entities —
+// "Name (secondary identifier)" — with the company as the disambiguator.
+// The parenthetical is dropped when the contact has no company.
 func contactPickLabel(c model.Contact) string {
 	if c.CompanyName != nil && *c.CompanyName != "" {
-		return fmt.Sprintf("%s — %s", c.Name, *c.CompanyName)
+		return fmt.Sprintf("%s (%s)", c.Name, *c.CompanyName)
 	}
 	return c.Name
 }
