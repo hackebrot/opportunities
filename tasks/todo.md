@@ -45,7 +45,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
 - [x] **T09** (#9) — Companies CLI: noun-first `opps company` parent with
       `create|list|show|update|rm` subcommands (plural alias
       `companies`); `--json` on read commands. Unit + int + e2e verification.
-- [ ] **T10** (#10) — Contacts: full vertical (model + store + service +
+- [x] **T10** (#10) — Contacts: full vertical (model + store + service +
       reusable `prompt.AddContact` + CLI). Nullable company FK; default
       company prepop when called inline.
 
