@@ -14,10 +14,14 @@ var (
 	ErrConflict = errors.New("store: conflict")
 )
 
-// pgUniqueViolation is SQLSTATE 23505; pgForeignKeyViolation is 23503.
+// SQLSTATE codes (class 23 — integrity constraint violation): 23505
+// unique violation, 23503 foreign-key violation, 23514 check violation.
 // Kept as literals so the store package does not depend on a separate
 // pgerrcode module.
+//
+// See https://www.postgresql.org/docs/current/errcodes-appendix.html
 const (
 	pgUniqueViolation     = "23505"
 	pgForeignKeyViolation = "23503"
+	pgCheckViolation      = "23514"
 )
