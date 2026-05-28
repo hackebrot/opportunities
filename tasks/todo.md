@@ -54,7 +54,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
 
 ## M1/P3 — Opportunities + events engine
 
-- [ ] **T11** (#11) — Opportunity model + store + create flow:
+- [x] **T11** (#11) — Opportunity model + store + create flow:
       `Create/Get/List/Update/Delete`, `SetLatestStatus` helper.
       `service.AddOpportunity` writes opp + `added` event in one tx.
       When this lands, address #36 (extract shared Postgres
