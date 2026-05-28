@@ -352,5 +352,5 @@ func openServiceFromConfig(cmd *cobra.Command) (*service.Service, func(), error)
 	if err != nil {
 		return nil, nil, err
 	}
-	return service.New(s), s.Close, nil
+	return service.New(s, clockFrom(cmd.Context())), s.Close, nil
 }
