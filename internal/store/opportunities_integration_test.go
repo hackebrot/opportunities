@@ -226,3 +226,59 @@ func TestIntegrationOpportunityEventTxRollback(t *testing.T) {
 		t.Fatalf("opportunity after rollback: want ErrNotFound, got %v", err)
 	}
 }
+
+// TestIntegrationInsertEventCrossOpportunityApplication proves the
+// composite FK is reported as a relationship conflict, not a missing row:
+// an event for opportunity B that references an application belonging to
+// opportunity A trips events_application_belongs_to_opportunity_fk, which
+// must surface as ErrConflict (the opportunity_id itself exists).
+func TestIntegrationInsertEventCrossOpportunityApplication(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	store := startPostgresStore(ctx, t)
+	if err := store.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+	companyID := seedCompany(ctx, t, store, "Acme Corp", "acmecorp")
+
+	oppA, err := store.InsertOpportunity(ctx, store.Pool, OpportunityParams{
+		CompanyID: companyID, Source: "outbound", Priority: "normal",
+	}, "watching")
+	if err != nil {
+		t.Fatalf("insert opportunity A: %v", err)
+	}
+	oppB, err := store.InsertOpportunity(ctx, store.Pool, OpportunityParams{
+		CompanyID: companyID, Source: "outbound", Priority: "normal",
+	}, "watching")
+	if err != nil {
+		t.Fatalf("insert opportunity B: %v", err)
+	}
+
+	// Application that belongs to opportunity A. Inserted directly: there
+	// is no application store layer yet.
+	var appID string
+	if err := store.Pool.QueryRow(
+		ctx,
+		`INSERT INTO applications (opportunity_id, status) VALUES ($1, 'applied') RETURNING id`,
+		oppA.ID,
+	).Scan(&appID); err != nil {
+		t.Fatalf("seed application: %v", err)
+	}
+
+	// Event for opportunity B referencing A's application: the composite FK
+	// rejects it. opportunity_id is valid, so this is a conflict, not a
+	// missing row.
+	_, err = store.InsertEvent(ctx, store.Pool, EventParams{
+		OpportunityID: oppB.ID,
+		ApplicationID: &appID,
+		Kind:          "applied",
+		OccurredAt:    time.Now(),
+	})
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("cross-opportunity application event: want ErrConflict, got %v", err)
+	}
+	if errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-opportunity application event: misclassified as ErrNotFound: %v", err)
+	}
+}

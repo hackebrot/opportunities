@@ -34,9 +34,9 @@ const eventColumns = `id, opportunity_id, application_id, stage_id, kind,
 	occurred_at, label, notes, created_at`
 
 // InsertEvent inserts a timeline event and returns the persisted row. q
-// may be the pool or a transaction. A composite-FK or kind/label CHECK
-// violation surfaces as ErrConflict; an opportunity_id that references no
-// opportunity surfaces as ErrNotFound.
+// may be the pool or a transaction. A composite application/opportunity FK
+// or kind/label CHECK violation surfaces as ErrConflict; a missing
+// opportunity_id or stage_id reference surfaces as ErrNotFound.
 func (s *Store) InsertEvent(ctx context.Context, q Querier, p EventParams) (model.Event, error) {
 	const query = `
 		INSERT INTO events (opportunity_id, application_id, stage_id, kind,
@@ -73,7 +73,17 @@ func translateEventErr(op string, err error) error {
 	if errors.As(err, &pg) {
 		switch pg.Code {
 		case pgForeignKeyViolation:
-			return fmt.Errorf("%w: event references a missing opportunity or application", ErrNotFound)
+			// With application_id set, the composite FK requires a matching
+			// (opportunity_id, application_id) application row. It fires both
+			// when no such application exists and when the application belongs
+			// to a different opportunity; the two are indistinguishable by
+			// constraint name. Either way the opportunity_id is valid, so this
+			// is a relationship conflict. The other FKs (opportunity_id,
+			// stage_id) fire when the referenced row is simply absent.
+			if pg.ConstraintName == "events_application_belongs_to_opportunity_fk" {
+				return fmt.Errorf("%w: event application is missing or belongs to another opportunity", ErrConflict)
+			}
+			return fmt.Errorf("%w: event references a missing opportunity or stage", ErrNotFound)
 		case pgCheckViolation:
 			return fmt.Errorf("%w: invalid event (%s)", ErrConflict, pg.ConstraintName)
 		}
