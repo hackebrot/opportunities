@@ -11,12 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/testcontainers/testcontainers-go"
-	tcpg "github.com/testcontainers/testcontainers-go/modules/postgres"
-
 	"github.com/hackebrot/opportunities/internal/cli"
 	"github.com/hackebrot/opportunities/internal/prompt"
 	"github.com/hackebrot/opportunities/internal/store"
+	"github.com/hackebrot/opportunities/internal/testutil"
 )
 
 // TestIntegrationCompanyCRUDViaCLI drives every company subcommand
@@ -187,33 +185,12 @@ type cliTestClock struct{}
 
 func (cliTestClock) Now() time.Time { return time.Now() }
 
-// startPostgresStore — duplicated from the store/service test packages;
-// will be consolidated in T11 (see todo #36).
+// startPostgresStore opens a *store.Store against an ephemeral Postgres
+// container (see testutil.StartPostgres). Released on test cleanup.
 func startPostgresStore(ctx context.Context, t *testing.T) *store.Store {
 	t.Helper()
 
-	pg, err := tcpg.Run(
-		ctx, "postgres:16-alpine",
-		tcpg.WithDatabase("opps_test"),
-		tcpg.WithUsername("opps"),
-		tcpg.WithPassword("opps"),
-		tcpg.BasicWaitStrategies(),
-	)
-	if err != nil {
-		t.Fatalf("start postgres container: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := testcontainers.TerminateContainer(pg); err != nil {
-			t.Logf("terminate container: %v", err)
-		}
-	})
-
-	dsn, err := pg.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatalf("connection string: %v", err)
-	}
-
-	s, err := store.Open(ctx, dsn)
+	s, err := store.Open(ctx, testutil.StartPostgres(ctx, t))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
