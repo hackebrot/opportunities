@@ -8,6 +8,8 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -17,6 +19,26 @@ import (
 // back the `opps db` subcommand.
 type Store struct {
 	Pool *pgxpool.Pool
+}
+
+// Querier is the subset of pgx methods shared by *pgxpool.Pool and
+// pgx.Tx. Store write helpers take a Querier so a single SQL statement
+// can run either standalone (against the pool) or inside a caller's
+// transaction (e.g. service.AddOpportunity, which writes the opportunity
+// and its initial event atomically).
+type Querier interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// Begin starts a transaction on the pool. The caller owns Commit/Rollback.
+func (s *Store) Begin(ctx context.Context) (pgx.Tx, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("store: begin tx: %w", err)
+	}
+	return tx, nil
 }
 
 // Open establishes a pgxpool against dsn. Connections are acquired

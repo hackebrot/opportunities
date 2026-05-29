@@ -54,7 +54,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
 
 ## M1/P3 — Opportunities + events engine
 
-- [ ] **T11** (#11) — Opportunity model + store + create flow:
+- [x] **T11** (#11) — Opportunity model + store + create flow:
       `Create/Get/List/Update/Delete`, `SetLatestStatus` helper.
       `service.AddOpportunity` writes opp + `added` event in one tx.
       When this lands, address #36 (extract shared Postgres
@@ -82,7 +82,10 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
 
 - [ ] **T15** (#15) — Applications store + service create + `applied` event +
       `ErrActiveExists` translation. Concurrent regression test. **No CLI
-      in this task.**
+      in this task.** Also replace the raw `INSERT INTO applications` in
+      `TestIntegrationInsertEventCrossOpportunityApplication`
+      (`internal/store/opportunities_integration_test.go`) with a call to
+      the new applications store insert.
 - [ ] **T16** (#16) — Application status transitions: every remaining row of
       the transition table (interview kinds, offer/counter, accepted,
       rejected/declined/withdrawn with `archive_reason_category`).

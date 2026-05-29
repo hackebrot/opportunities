@@ -23,7 +23,7 @@ func TestIntegrationCreateContactWithCompany(t *testing.T) {
 		t.Fatalf("migrate up: %v", err)
 	}
 
-	svc := service.New(st)
+	svc := service.New(st, testClock)
 
 	company, err := svc.CreateCompany(ctx, service.CompanyInput{Name: "Foo Corp"})
 	if err != nil {

@@ -169,6 +169,9 @@ func runCmd(ctx context.Context, t *testing.T, args ...string) string {
 
 func tryRun(ctx context.Context, t *testing.T, args ...string) (string, error) {
 	t.Helper()
+	// main seeds a real clock into the command context; mirror that here,
+	// since the service layer requires one and refuses to construct without.
+	ctx = cli.WithClock(ctx, cliTestClock{})
 	root := cli.NewRoot("v0.0.0-test")
 	var out bytes.Buffer
 	root.SetOut(&out)
@@ -177,6 +180,12 @@ func tryRun(ctx context.Context, t *testing.T, args ...string) (string, error) {
 	err := root.ExecuteContext(ctx)
 	return out.String(), err
 }
+
+// cliTestClock is the test analog of main's system clock. The company CLI
+// tests don't assert on timestamps, so a live clock is fine.
+type cliTestClock struct{}
+
+func (cliTestClock) Now() time.Time { return time.Now() }
 
 // startPostgresStore — duplicated from the store/service test packages;
 // will be consolidated in T11 (see todo #36).

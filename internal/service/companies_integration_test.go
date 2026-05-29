@@ -28,7 +28,7 @@ func TestIntegrationCreateCompanyUniqueSlug(t *testing.T) {
 		t.Fatalf("migrate up: %v", err)
 	}
 
-	svc := service.New(st)
+	svc := service.New(st, testClock)
 
 	first, err := svc.CreateCompany(ctx, service.CompanyInput{Name: "Foo Corp"})
 	if err != nil {
