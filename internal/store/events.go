@@ -69,8 +69,7 @@ func translateEventErr(op string, err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
-	var pg *pgconn.PgError
-	if errors.As(err, &pg) {
+	if pg, ok := errors.AsType[*pgconn.PgError](err); ok {
 		switch pg.Code {
 		case pgForeignKeyViolation:
 			// With application_id set, the composite FK requires a matching

@@ -209,8 +209,8 @@ func assertPGError(t *testing.T, err error, wantSQLSTATE, wantConstraint string)
 	if err == nil {
 		t.Fatalf("expected error with SQLSTATE %s on %q, got nil", wantSQLSTATE, wantConstraint)
 	}
-	var pgErr *pgconn.PgError
-	if !errors.As(err, &pgErr) {
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	if !ok {
 		t.Fatalf("expected *pgconn.PgError, got %T: %v", err, err)
 	}
 	if pgErr.Code != wantSQLSTATE {
