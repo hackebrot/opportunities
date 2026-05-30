@@ -198,8 +198,7 @@ func translateOpportunityErr(op string, err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
-	var pg *pgconn.PgError
-	if errors.As(err, &pg) && pg.Code == pgForeignKeyViolation {
+	if pg, ok := errors.AsType[*pgconn.PgError](err); ok && pg.Code == pgForeignKeyViolation {
 		// company_id pointed at a company that doesn't exist. Name the
 		// company so the caller isn't left guessing which entity is missing.
 		return fmt.Errorf("%w: unknown company ID", ErrNotFound)

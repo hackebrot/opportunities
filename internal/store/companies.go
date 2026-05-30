@@ -137,8 +137,7 @@ func translateCompanyErr(op string, err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
-	var pg *pgconn.PgError
-	if errors.As(err, &pg) && pg.Code == pgUniqueViolation {
+	if pg, ok := errors.AsType[*pgconn.PgError](err); ok && pg.Code == pgUniqueViolation {
 		return ErrConflict
 	}
 	return fmt.Errorf("store: %s company: %w", op, err)
