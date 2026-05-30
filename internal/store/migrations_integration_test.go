@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/testcontainers/testcontainers-go"
-	tcpg "github.com/testcontainers/testcontainers-go/modules/postgres"
+
+	"github.com/hackebrot/opportunities/internal/testutil"
 )
 
 // expectedTables is the schema's table list (excluding goose's own
@@ -57,34 +57,13 @@ func TestIntegrationMigrationsRoundTrip(t *testing.T) {
 	}
 }
 
-// startPostgresStore spins up an ephemeral Postgres container and
-// returns a *Store connected to it. The container and pool are
+// startPostgresStore opens a *Store against an ephemeral Postgres
+// container (see testutil.StartPostgres). The container and pool are
 // released on test cleanup.
 func startPostgresStore(ctx context.Context, t *testing.T) *Store {
 	t.Helper()
 
-	pg, err := tcpg.Run(
-		ctx, "postgres:16-alpine",
-		tcpg.WithDatabase("opps_test"),
-		tcpg.WithUsername("opps"),
-		tcpg.WithPassword("opps"),
-		tcpg.BasicWaitStrategies(),
-	)
-	if err != nil {
-		t.Fatalf("start postgres container: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := testcontainers.TerminateContainer(pg); err != nil {
-			t.Logf("terminate container: %v", err)
-		}
-	})
-
-	dsn, err := pg.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatalf("connection string: %v", err)
-	}
-
-	store, err := Open(ctx, dsn)
+	store, err := Open(ctx, testutil.StartPostgres(ctx, t))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
