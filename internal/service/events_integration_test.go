@@ -225,7 +225,7 @@ func TestIntegrationAppendEventValidation(t *testing.T) {
 	}
 }
 
-func TestIntegrationAppendEventTxRollbackOnPostStateFailure(t *testing.T) {
+func TestIntegrationAppendEventPreconditionShortCircuitsBeforeWrite(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
