@@ -152,12 +152,7 @@ func (s *Service) AppendEvent(ctx context.Context, in EventInput) (model.Event, 
 	case "archived":
 		// archive_reason mirrors the event's notes so a caller reading
 		// opportunities directly doesn't need to JOIN events.
-		var reason *string
-		if in.Notes != "" {
-			n := in.Notes
-			reason = &n
-		}
-		if err := s.store.SetOpportunityArchived(ctx, tx, in.OpportunityID, now, reason); err != nil {
+		if err := s.store.SetOpportunityArchived(ctx, tx, in.OpportunityID, now, nullableString(in.Notes)); err != nil {
 			return model.Event{}, fmt.Errorf("%s: %w", op, err)
 		}
 	case "declined":
