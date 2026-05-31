@@ -230,9 +230,11 @@ func checkEventPrecondition(kind string, state store.OpportunityStatusInputs) er
 		}
 	case "declined":
 		// Only the no-application branch is implemented; declining an
-		// existing application goes through the applications layer.
+		// existing application goes through the applications layer. The
+		// rejection is state-based (state.AnyApp), so it surfaces as
+		// ErrPrecondition like the other state-machine rejections.
 		if state.AnyApp {
-			return fmt.Errorf("%w: declined with an application is not yet supported", ErrValidation)
+			return fmt.Errorf("%w: declined with an application is not yet supported", ErrPrecondition)
 		}
 		if state.Archived {
 			return fmt.Errorf("%w: opportunity is already archived", ErrPrecondition)
