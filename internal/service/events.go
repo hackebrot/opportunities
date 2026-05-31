@@ -117,7 +117,8 @@ func (s *Service) RecomputeLatestStatus(ctx context.Context, q store.Querier, op
 func (s *Service) AppendEvent(ctx context.Context, in EventInput) (model.Event, error) {
 	const op = "service.AppendEvent"
 
-	if strings.TrimSpace(in.OpportunityID) == "" {
+	oppID := strings.TrimSpace(in.OpportunityID)
+	if oppID == "" {
 		return model.Event{}, fmt.Errorf("%w: opportunity is required", ErrValidation)
 	}
 	if !opportunityOnlyEventKinds[in.Kind] {
@@ -135,7 +136,7 @@ func (s *Service) AppendEvent(ctx context.Context, in EventInput) (model.Event, 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	state, err := s.store.LoadOpportunityStatusInputs(ctx, tx, in.OpportunityID)
+	state, err := s.store.LoadOpportunityStatusInputs(ctx, tx, oppID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return model.Event{}, err
@@ -153,19 +154,19 @@ func (s *Service) AppendEvent(ctx context.Context, in EventInput) (model.Event, 
 	case "archived":
 		// archive_reason mirrors the event's notes so a caller reading
 		// opportunities directly doesn't need to JOIN events.
-		if err := s.store.SetOpportunityArchived(ctx, tx, in.OpportunityID, now, nullableString(in.Notes)); err != nil {
+		if err := s.store.SetOpportunityArchived(ctx, tx, oppID, now, nullableString(in.Notes)); err != nil {
 			return model.Event{}, fmt.Errorf("%s: %w", op, err)
 		}
 	case "declined":
 		// declined-without-app: only archived_at is required;
 		// archive_reason stays untouched (NULL on a fresh opportunity).
-		if err := s.store.SetOpportunityArchived(ctx, tx, in.OpportunityID, now, nil); err != nil {
+		if err := s.store.SetOpportunityArchived(ctx, tx, oppID, now, nil); err != nil {
 			return model.Event{}, fmt.Errorf("%s: %w", op, err)
 		}
 	}
 
 	ev, err := s.store.InsertEvent(ctx, tx, store.EventParams{
-		OpportunityID: in.OpportunityID,
+		OpportunityID: oppID,
 		Kind:          in.Kind,
 		OccurredAt:    now,
 		Label:         label,
@@ -175,7 +176,7 @@ func (s *Service) AppendEvent(ctx context.Context, in EventInput) (model.Event, 
 		return model.Event{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	if _, err := s.RecomputeLatestStatus(ctx, tx, in.OpportunityID); err != nil {
+	if _, err := s.RecomputeLatestStatus(ctx, tx, oppID); err != nil {
 		return model.Event{}, fmt.Errorf("%s: %w", op, err)
 	}
 
