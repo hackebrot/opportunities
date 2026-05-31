@@ -152,7 +152,7 @@ func TestIntegrationOpportunitySetLatestStatus(t *testing.T) {
 	}
 
 	// Active transition: no archived_at.
-	if err := store.SetLatestStatus(ctx, opp.ID, "exploring", nil); err != nil {
+	if err := store.SetLatestStatus(ctx, store.Pool, opp.ID, "exploring", nil); err != nil {
 		t.Fatalf("set exploring: %v", err)
 	}
 	got, err := store.GetOpportunity(ctx, opp.ID)
@@ -165,7 +165,7 @@ func TestIntegrationOpportunitySetLatestStatus(t *testing.T) {
 
 	// Archive transition: archived_at set.
 	archivedAt := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
-	if err := store.SetLatestStatus(ctx, opp.ID, "archived", &archivedAt); err != nil {
+	if err := store.SetLatestStatus(ctx, store.Pool, opp.ID, "archived", &archivedAt); err != nil {
 		t.Fatalf("set archived: %v", err)
 	}
 	got, err = store.GetOpportunity(ctx, opp.ID)
@@ -177,7 +177,7 @@ func TestIntegrationOpportunitySetLatestStatus(t *testing.T) {
 	}
 
 	// Missing id is ErrNotFound.
-	if err := store.SetLatestStatus(ctx, "00000000-0000-0000-0000-000000000000", "watching", nil); !errors.Is(err, ErrNotFound) {
+	if err := store.SetLatestStatus(ctx, store.Pool, "00000000-0000-0000-0000-000000000000", "watching", nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("set missing: want ErrNotFound, got %v", err)
 	}
 }

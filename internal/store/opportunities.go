@@ -151,15 +151,17 @@ func (s *Store) UpdateOpportunity(ctx context.Context, id string, p OpportunityP
 // SetLatestStatus updates the denormalized latest_status and archived_at
 // of id. Pass a non-nil archivedAt to mark the opportunity dead, nil to
 // leave it active. Missing id is ErrNotFound. Called only by the service
-// layer, which owns latest_status.
-func (s *Store) SetLatestStatus(ctx context.Context, id, newStatus string, archivedAt *time.Time) error {
-	const q = `
+// layer, which owns latest_status; q may be the pool or a transaction so
+// the write can join an enclosing tx (e.g. the events-engine flow that
+// appends an event and recomputes latest_status atomically).
+func (s *Store) SetLatestStatus(ctx context.Context, q Querier, id, newStatus string, archivedAt *time.Time) error {
+	const query = `
 		UPDATE opportunities
 		SET latest_status = $2,
 			archived_at = $3,
 			updated_at = now()
 		WHERE id = $1`
-	tag, err := s.Pool.Exec(ctx, q, id, newStatus, archivedAt)
+	tag, err := q.Exec(ctx, query, id, newStatus, archivedAt)
 	if err != nil {
 		return fmt.Errorf("store: set latest_status: %w", err)
 	}
