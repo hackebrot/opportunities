@@ -16,7 +16,8 @@ import (
 //
 // Label is required for Kind == "custom" and forbidden otherwise (matches
 // the events_label_only_for_custom_chk constraint). Notes is free-form;
-// for archived/declined it doubles as the archive reason.
+// for archived it doubles as the opportunity-level archive reason
+// (declined leaves archive_reason untouched).
 type EventInput struct {
 	OpportunityID string
 	Kind          string
@@ -105,9 +106,9 @@ func (s *Service) RecomputeLatestStatus(ctx context.Context, q store.Querier, op
 
 // AppendEvent validates an event against the opportunity-only contract,
 // then writes the event, applies opportunity-level side effects
-// (archived_at + archive_reason for archived/declined), and recomputes
-// latest_status — all in one transaction. Either every change lands or
-// none do.
+// (archived stamps archived_at + archive_reason; declined stamps
+// archived_at only), and recomputes latest_status — all in one
+// transaction. Either every change lands or none do.
 //
 // Returns ErrValidation for malformed input, ErrPrecondition when the
 // event is well-formed but invalid for the opportunity's current state
