@@ -206,6 +206,13 @@ type OpportunityStatusInputs struct {
 // LoadOpportunityStatusInputs gathers the state the latest_status rule
 // needs in a single round-trip. q may be the pool or a transaction.
 // Missing id is ErrNotFound.
+//
+// The opportunity row is locked with FOR UPDATE OF o: when run inside a
+// transaction that will write back (e.g. service.AppendEvent), the lock
+// is held until commit, so two concurrent appends serialize on the row
+// and the second observer reads the first one's writes. Without the
+// lock, two concurrent archives could both pass the "not archived yet"
+// precondition.
 func (s *Store) LoadOpportunityStatusInputs(ctx context.Context, q Querier, id string) (OpportunityStatusInputs, error) {
 	const query = `
 		SELECT
@@ -224,7 +231,8 @@ func (s *Store) LoadOpportunityStatusInputs(ctx context.Context, q Querier, id s
 				WHERE e.opportunity_id = o.id
 				  AND e.kind NOT IN ('added','note','follow_up','custom','archived','reopened')) AS any_non_passive_event
 		FROM opportunities o
-		WHERE o.id = $1`
+		WHERE o.id = $1
+		FOR UPDATE OF o`
 	var (
 		out    OpportunityStatusInputs
 		active *string
