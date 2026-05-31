@@ -148,22 +148,40 @@ func (s *Store) UpdateOpportunity(ctx context.Context, id string, p OpportunityP
 	return o, nil
 }
 
-// SetLatestStatus updates the denormalized latest_status and archived_at
-// of id. Pass a non-nil archivedAt to mark the opportunity dead, nil to
-// leave it active. Missing id is ErrNotFound. Called only by the service
-// layer, which owns latest_status; q may be the pool or a transaction so
-// the write can join an enclosing tx (e.g. the events-engine flow that
-// appends an event and recomputes latest_status atomically).
-func (s *Store) SetLatestStatus(ctx context.Context, q Querier, id, newStatus string, archivedAt *time.Time) error {
+// SetLatestStatus updates the denormalized latest_status of id. Missing
+// id is ErrNotFound. Called only by the service layer, which owns
+// latest_status; q may be the pool or a transaction so the write can
+// join an enclosing tx that appends an event and recomputes
+// latest_status atomically.
+func (s *Store) SetLatestStatus(ctx context.Context, q Querier, id, newStatus string) error {
 	const query = `
 		UPDATE opportunities
 		SET latest_status = $2,
-			archived_at = $3,
 			updated_at = now()
 		WHERE id = $1`
-	tag, err := q.Exec(ctx, query, id, newStatus, archivedAt)
+	tag, err := q.Exec(ctx, query, id, newStatus)
 	if err != nil {
 		return fmt.Errorf("store: set latest_status: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetOpportunityArchived marks the opportunity dead by writing
+// archived_at and archive_reason. Pass reason = nil to clear the column.
+// Missing id is ErrNotFound.
+func (s *Store) SetOpportunityArchived(ctx context.Context, q Querier, id string, archivedAt time.Time, reason *string) error {
+	const query = `
+		UPDATE opportunities
+		SET archived_at = $2,
+			archive_reason = $3,
+			updated_at = now()
+		WHERE id = $1`
+	tag, err := q.Exec(ctx, query, id, archivedAt, reason)
+	if err != nil {
+		return fmt.Errorf("store: set opportunity archived: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
