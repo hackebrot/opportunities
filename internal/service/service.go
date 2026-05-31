@@ -12,6 +12,13 @@ import (
 // Wrapped with %w so callers can errors.Is(err, ErrValidation).
 var ErrValidation = errors.New("service: invalid input")
 
+// ErrPrecondition is returned when an event the caller is trying to
+// append cannot land in the opportunity's current state — e.g.
+// `exploring` once an application exists, or `archived` on an already
+// archived opportunity. Distinct from ErrValidation because the input
+// itself is well-formed; only the state-machine context rejects it.
+var ErrPrecondition = errors.New("service: precondition not met")
+
 // Clock supplies the current time to business logic. The spec forbids
 // time.Now() in the service layer so event timestamps can be pinned in
 // tests; production seeds a real clock from cmd/opps.

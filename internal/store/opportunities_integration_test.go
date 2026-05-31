@@ -151,8 +151,8 @@ func TestIntegrationOpportunitySetLatestStatus(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	// Active transition: no archived_at.
-	if err := store.SetLatestStatus(ctx, opp.ID, "exploring", nil); err != nil {
+	// Active transition: latest_status changes, archived_at stays nil.
+	if err := store.SetLatestStatus(ctx, store.Pool, opp.ID, "exploring"); err != nil {
 		t.Fatalf("set exploring: %v", err)
 	}
 	got, err := store.GetOpportunity(ctx, opp.ID)
@@ -163,10 +163,16 @@ func TestIntegrationOpportunitySetLatestStatus(t *testing.T) {
 		t.Fatalf("after exploring: status=%q archived=%v", got.LatestStatus, got.ArchivedAt)
 	}
 
-	// Archive transition: archived_at set.
+	// Archive transition: SetOpportunityArchived stamps archived_at +
+	// archive_reason, then SetLatestStatus flips latest_status (the
+	// split mirrors what the events-engine flow does inside its tx).
 	archivedAt := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
-	if err := store.SetLatestStatus(ctx, opp.ID, "archived", &archivedAt); err != nil {
+	reason := "delisted"
+	if err := store.SetOpportunityArchived(ctx, store.Pool, opp.ID, archivedAt, &reason); err != nil {
 		t.Fatalf("set archived: %v", err)
+	}
+	if err := store.SetLatestStatus(ctx, store.Pool, opp.ID, "archived"); err != nil {
+		t.Fatalf("set archived latest_status: %v", err)
 	}
 	got, err = store.GetOpportunity(ctx, opp.ID)
 	if err != nil {
@@ -175,10 +181,16 @@ func TestIntegrationOpportunitySetLatestStatus(t *testing.T) {
 	if got.LatestStatus != "archived" || got.ArchivedAt == nil || !got.ArchivedAt.Equal(archivedAt) {
 		t.Fatalf("after archived: status=%q archived=%v", got.LatestStatus, got.ArchivedAt)
 	}
+	if got.ArchiveReason == nil || *got.ArchiveReason != reason {
+		t.Fatalf("after archived: archive_reason=%v, want %q", got.ArchiveReason, reason)
+	}
 
-	// Missing id is ErrNotFound.
-	if err := store.SetLatestStatus(ctx, "00000000-0000-0000-0000-000000000000", "watching", nil); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("set missing: want ErrNotFound, got %v", err)
+	// Missing id is ErrNotFound for both setters.
+	if err := store.SetLatestStatus(ctx, store.Pool, "00000000-0000-0000-0000-000000000000", "watching"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("set missing latest_status: want ErrNotFound, got %v", err)
+	}
+	if err := store.SetOpportunityArchived(ctx, store.Pool, "00000000-0000-0000-0000-000000000000", archivedAt, nil); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("set missing archived: want ErrNotFound, got %v", err)
 	}
 }
 

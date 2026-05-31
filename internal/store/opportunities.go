@@ -148,18 +148,18 @@ func (s *Store) UpdateOpportunity(ctx context.Context, id string, p OpportunityP
 	return o, nil
 }
 
-// SetLatestStatus updates the denormalized latest_status and archived_at
-// of id. Pass a non-nil archivedAt to mark the opportunity dead, nil to
-// leave it active. Missing id is ErrNotFound. Called only by the service
-// layer, which owns latest_status.
-func (s *Store) SetLatestStatus(ctx context.Context, id, newStatus string, archivedAt *time.Time) error {
-	const q = `
+// SetLatestStatus updates the denormalized latest_status of id. Missing
+// id is ErrNotFound. Called only by the service layer, which owns
+// latest_status; q may be the pool or a transaction so the write can
+// join an enclosing tx that appends an event and recomputes
+// latest_status atomically.
+func (s *Store) SetLatestStatus(ctx context.Context, q Querier, id, newStatus string) error {
+	const query = `
 		UPDATE opportunities
 		SET latest_status = $2,
-			archived_at = $3,
 			updated_at = now()
 		WHERE id = $1`
-	tag, err := s.Pool.Exec(ctx, q, id, newStatus, archivedAt)
+	tag, err := q.Exec(ctx, query, id, newStatus)
 	if err != nil {
 		return fmt.Errorf("store: set latest_status: %w", err)
 	}
@@ -167,6 +167,93 @@ func (s *Store) SetLatestStatus(ctx context.Context, id, newStatus string, archi
 		return ErrNotFound
 	}
 	return nil
+}
+
+// SetOpportunityArchived marks the opportunity dead by writing
+// archived_at and archive_reason. Pass reason = nil to clear the column.
+// Missing id is ErrNotFound.
+func (s *Store) SetOpportunityArchived(ctx context.Context, q Querier, id string, archivedAt time.Time, reason *string) error {
+	const query = `
+		UPDATE opportunities
+		SET archived_at = $2,
+			archive_reason = $3,
+			updated_at = now()
+		WHERE id = $1`
+	tag, err := q.Exec(ctx, query, id, archivedAt, reason)
+	if err != nil {
+		return fmt.Errorf("store: set opportunity archived: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// OpportunityStatusInputs is the data the latest_status rule reads:
+// whether the opportunity is archived, the status of its (at most one)
+// active application, the status of its most recently applied
+// application, whether any application exists, and whether any
+// non-passive event exists. Passive event kinds (added, note, follow_up,
+// custom, archived, reopened) carry no progression signal.
+type OpportunityStatusInputs struct {
+	Archived           bool
+	ActiveAppStatus    string
+	LatestAppStatus    string
+	AnyApp             bool
+	AnyNonPassiveEvent bool
+}
+
+// LoadOpportunityStatusInputs gathers the state the latest_status rule
+// needs in a single round-trip. q may be the pool or a transaction.
+// Missing id is ErrNotFound.
+//
+// The opportunity row is locked with FOR UPDATE OF o: when run inside a
+// transaction that will write back (e.g. service.AppendEvent), the lock
+// is held until commit, so two concurrent appends serialize on the row
+// and the second observer reads the first one's writes. Without the
+// lock, two concurrent archives could both pass the "not archived yet"
+// precondition.
+func (s *Store) LoadOpportunityStatusInputs(ctx context.Context, q Querier, id string) (OpportunityStatusInputs, error) {
+	const query = `
+		SELECT
+			(o.archived_at IS NOT NULL) AS archived,
+			(SELECT a.status FROM applications a
+				WHERE a.opportunity_id = o.id
+				  AND a.status IN ('applied','in_progress','offer')
+				LIMIT 1) AS active_app_status,
+			(SELECT a.status FROM applications a
+				WHERE a.opportunity_id = o.id
+				ORDER BY a.applied_at DESC NULLS LAST, a.created_at DESC
+				LIMIT 1) AS latest_app_status,
+			EXISTS (SELECT 1 FROM applications a
+				WHERE a.opportunity_id = o.id) AS any_app,
+			EXISTS (SELECT 1 FROM events e
+				WHERE e.opportunity_id = o.id
+				  AND e.kind NOT IN ('added','note','follow_up','custom','archived','reopened')) AS any_non_passive_event
+		FROM opportunities o
+		WHERE o.id = $1
+		FOR UPDATE OF o`
+	var (
+		out    OpportunityStatusInputs
+		active *string
+		latest *string
+	)
+	err := q.QueryRow(ctx, query, id).Scan(
+		&out.Archived, &active, &latest, &out.AnyApp, &out.AnyNonPassiveEvent,
+	)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return OpportunityStatusInputs{}, ErrNotFound
+	case err != nil:
+		return OpportunityStatusInputs{}, fmt.Errorf("store: load opportunity status inputs: %w", err)
+	}
+	if active != nil {
+		out.ActiveAppStatus = *active
+	}
+	if latest != nil {
+		out.LatestAppStatus = *latest
+	}
+	return out, nil
 }
 
 // DeleteOpportunity removes the opportunity by id. Missing id is
