@@ -201,7 +201,7 @@ func normalizeEventLabel(kind, label string) (*string, error) {
 		if trimmed == "" {
 			return nil, fmt.Errorf("%w: label is required for custom events", ErrValidation)
 		}
-		return &label, nil
+		return &trimmed, nil
 	}
 	if trimmed != "" {
 		return nil, fmt.Errorf("%w: label is only valid for custom events", ErrValidation)
