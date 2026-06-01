@@ -96,11 +96,19 @@ func Slug(name string) (string, error) {
 
 // CreateCompany validates input, generates a slug, and persists.
 func (s *Service) CreateCompany(ctx context.Context, in CompanyInput) (model.Company, error) {
+	return s.createCompany(ctx, s.store.Pool, in)
+}
+
+// createCompany is the tx-aware shared implementation behind
+// CreateCompany. q may be the pool or a transaction; callers running
+// inside an outer tx (e.g. AddOpportunity) pass the tx so the
+// company insert commits or rolls back with the rest of the graph.
+func (s *Service) createCompany(ctx context.Context, q store.Querier, in CompanyInput) (model.Company, error) {
 	name, slug, err := in.normalize()
 	if err != nil {
 		return model.Company{}, err
 	}
-	return s.store.CreateCompany(ctx, store.CompanyParams{
+	return s.store.CreateCompany(ctx, q, store.CompanyParams{
 		Name:           name,
 		Slug:           slug,
 		Website:        in.Website,

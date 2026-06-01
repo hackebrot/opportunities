@@ -46,11 +46,17 @@ func normalizeCompanyID(id *string) *string {
 
 // CreateContact validates input and persists.
 func (s *Service) CreateContact(ctx context.Context, in ContactInput) (model.Contact, error) {
+	return s.createContact(ctx, s.store.Pool, in)
+}
+
+// createContact is the tx-aware shared implementation behind
+// CreateContact. q may be the pool or a transaction.
+func (s *Service) createContact(ctx context.Context, q store.Querier, in ContactInput) (model.Contact, error) {
 	name, companyID, err := in.normalize()
 	if err != nil {
 		return model.Contact{}, err
 	}
-	return s.store.CreateContact(ctx, store.ContactParams{
+	return s.store.CreateContact(ctx, q, store.ContactParams{
 		Name:      name,
 		Email:     in.Email,
 		LinkedIn:  in.LinkedIn,

@@ -21,9 +21,9 @@ func seedOpportunity(ctx context.Context, t *testing.T, svc *service.Service) st
 	if err != nil {
 		t.Fatalf("create company: %v", err)
 	}
-	opp, err := svc.AddOpportunity(ctx, service.OpportunityInput{
-		CompanyID: company.ID,
-		Source:    "outbound",
+	opp, err := svc.AddOpportunity(ctx, service.OpportunityCreationInput{
+		Company:     service.OpportunityCompanyChoice{ID: company.ID},
+		Opportunity: service.OpportunityInput{Source: "outbound"},
 	})
 	if err != nil {
 		t.Fatalf("add opportunity: %v", err)
