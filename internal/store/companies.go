@@ -26,16 +26,18 @@ type CompanyParams struct {
 const companyColumns = `id, name, slug, website, careers_url, preferred_email, notes, created_at, updated_at`
 
 // CreateCompany inserts a company and returns the persisted row.
-// Duplicate slug surfaces as ErrConflict.
-func (s *Store) CreateCompany(ctx context.Context, p CompanyParams) (model.Company, error) {
-	const q = `
+// Duplicate slug surfaces as ErrConflict. q may be the pool or a
+// transaction, so the company insert can join an enclosing tx
+// (e.g. the inline-create branch of opportunity creation).
+func (s *Store) CreateCompany(ctx context.Context, q Querier, p CompanyParams) (model.Company, error) {
+	const query = `
 		INSERT INTO companies (name, slug, website, careers_url,
 			preferred_email, notes)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING ` + companyColumns
 
-	row := s.Pool.QueryRow(
-		ctx, q,
+	row := q.QueryRow(
+		ctx, query,
 		p.Name, p.Slug, p.Website, p.CareersURL, p.PreferredEmail, p.Notes,
 	)
 	c, err := scanCompany(row)

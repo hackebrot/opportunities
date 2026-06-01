@@ -30,9 +30,11 @@ const contactColumns = `c.id, c.name, c.email, c.linkedin, c.role,
 
 // CreateContact inserts a contact and returns the persisted row with its
 // company name resolved. A company_id that references no company surfaces
-// as ErrNotFound.
-func (s *Store) CreateContact(ctx context.Context, p ContactParams) (model.Contact, error) {
-	const q = `
+// as ErrNotFound. q may be the pool or a transaction, so the insert can
+// join an enclosing tx (e.g. the inline-create branch of opportunity
+// creation, which writes a freshly-created company in the same tx).
+func (s *Store) CreateContact(ctx context.Context, q Querier, p ContactParams) (model.Contact, error) {
+	const query = `
 		WITH ins AS (
 			INSERT INTO contacts (name, email, linkedin, role, company_id, notes)
 			VALUES ($1, $2, $3, $4, $5, $6)
@@ -43,8 +45,8 @@ func (s *Store) CreateContact(ctx context.Context, p ContactParams) (model.Conta
 		FROM ins c
 		LEFT JOIN companies comp ON comp.id = c.company_id`
 
-	row := s.Pool.QueryRow(
-		ctx, q,
+	row := q.QueryRow(
+		ctx, query,
 		p.Name, p.Email, p.LinkedIn, p.Role, p.CompanyID, p.Notes,
 	)
 	c, err := scanContact(row)
