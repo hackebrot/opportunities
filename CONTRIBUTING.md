@@ -88,6 +88,9 @@ Every PR carries:
 - **One or more `area:*` labels** — one per package the diff touches
   (`area:cli`, `area:prompt`, `area:service`, `area:store`, `area:config`,
   `area:i18n`, `area:migrations`).
+- **`project`** when the diff is repo-level project files and metadata
+  (`.github/`, `CLAUDE.md`, `CONTRIBUTING.md`, `README.md`, `Makefile`)
+  rather than a Go package.
 - **Quality labels** when the PR is primarily about that concern:
   `code quality` (lint/format), `ci` (workflow), `test` (test infra or
   coverage).
