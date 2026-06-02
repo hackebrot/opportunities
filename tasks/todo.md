@@ -64,7 +64,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
       `follow_up`/`custom`/`declined`-without-app.
       `service.RecomputeLatestStatus` implementing the 6-step rule.
       Comprehensive table-driven unit tests.
-- [ ] **T13** (#13) — Opportunity prompts + CLI with inline-create:
+- [x] **T13** (#13) — Opportunity prompts + CLI with inline-create:
       `prompt.AddOpportunity` uses `PickOrCreate` for company *and*
       contact; all inserts in one tx. CLI: `opps opportunity`
       parent with `create | list | show | update | rm | archive | note |
