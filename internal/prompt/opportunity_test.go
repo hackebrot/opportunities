@@ -236,6 +236,26 @@ func TestAddOpportunityNonInteractiveMissingCompanyErrors(t *testing.T) {
 	}
 }
 
+// TestAddOpportunityNonInteractivePriorityPassesThrough pins the rule
+// that an empty Priority does not require --priority non-interactively;
+// the service defaults blank Priority to "normal".
+func TestAddOpportunityNonInteractivePriorityPassesThrough(t *testing.T) {
+	t.Parallel()
+
+	ctx := prompt.WithNonInteractive(context.Background(), true)
+	creator := &fakeOpportunityCreator{out: model.Opportunity{ID: "o1"}}
+	_, err := prompt.AddOpportunity(ctx, creator, service.OpportunityCreationInput{
+		Company:     service.OpportunityCompanyChoice{ID: "c1"},
+		Opportunity: service.OpportunityInput{Source: "outbound"},
+	})
+	if err != nil {
+		t.Fatalf("AddOpportunity: %v", err)
+	}
+	if creator.got.Opportunity.Priority != "" {
+		t.Fatalf("Priority = %q, want \"\" (service defaults blank to \"normal\")", creator.got.Opportunity.Priority)
+	}
+}
+
 // TestAddOpportunityNonInteractiveDoesNotAutoSelectUniqueCompany pins
 // the rule that create operations require an explicit --company even
 // when exactly one company exists: read-class helpers auto-select on

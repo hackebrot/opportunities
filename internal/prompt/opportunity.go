@@ -277,9 +277,12 @@ func pickRelationship(ctx context.Context) (string, error) {
 	return InterfaceFrom(ctx).Select("Relationship", opportunityRelationships)
 }
 
-// promptOpportunityBody captures the opportunity's own fields. Source is
-// required; role title, location, office days, priority, and notes are
-// optional and skipped when prefilled or running non-interactively.
+// promptOpportunityBody captures the opportunity's own fields.
+// Non-interactive callers must supply Source and OfficeDaysPerWeek
+// (both error with ErrNonInteractive when missing); Priority falls
+// through to the service's "normal" default if left blank; role
+// title, location, source detail, and notes are pure optionals that
+// stay empty when not prefilled.
 func promptOpportunityBody(ctx context.Context, in *service.OpportunityInput) error {
 	if err := textOptional(ctx, "Role title (optional)", &in.RoleTitle); err != nil {
 		return err
@@ -304,7 +307,9 @@ func promptOpportunityBody(ctx context.Context, in *service.OpportunityInput) er
 	if err := textOptional(ctx, "Source detail (optional)", &in.SourceDetail); err != nil {
 		return err
 	}
-	if in.Priority == "" {
+	// Priority falls through to the service's default ("normal") in
+	// non-interactive mode; only prompt interactively.
+	if in.Priority == "" && !IsNonInteractive(ctx) {
 		p, err := pickFromMenu(ctx, "Priority", opportunityPriorities)
 		if err != nil {
 			return err
