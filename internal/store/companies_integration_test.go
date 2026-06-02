@@ -32,7 +32,7 @@ func TestIntegrationCompaniesCRUD(t *testing.T) {
 		Notes:          "first contact via meetup",
 	}
 
-	created, err := store.CreateCompany(ctx, params)
+	created, err := store.CreateCompany(ctx, store.Pool, params)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestIntegrationCompaniesCRUD(t *testing.T) {
 
 	// Second company, no preferred_email, to exercise NULL handling
 	// and List ordering.
-	second, err := store.CreateCompany(ctx, CompanyParams{
+	second, err := store.CreateCompany(ctx, store.Pool, CompanyParams{
 		Name: "Beta Labs",
 		Slug: "betalabs",
 	})
@@ -130,14 +130,14 @@ func TestIntegrationCompaniesDuplicateSlug(t *testing.T) {
 		t.Fatalf("migrate up: %v", err)
 	}
 
-	if _, err := store.CreateCompany(ctx, CompanyParams{
+	if _, err := store.CreateCompany(ctx, store.Pool, CompanyParams{
 		Name: "Acme Corp",
 		Slug: "acmecorp",
 	}); err != nil {
 		t.Fatalf("first create: %v", err)
 	}
 
-	_, err := store.CreateCompany(ctx, CompanyParams{
+	_, err := store.CreateCompany(ctx, store.Pool, CompanyParams{
 		Name: "Acme Corp (second branch)",
 		Slug: "acmecorp",
 	})
@@ -146,7 +146,7 @@ func TestIntegrationCompaniesDuplicateSlug(t *testing.T) {
 	}
 
 	// Update into an existing slug also conflicts.
-	other, err := store.CreateCompany(ctx, CompanyParams{
+	other, err := store.CreateCompany(ctx, store.Pool, CompanyParams{
 		Name: "Other Co",
 		Slug: "otherco",
 	})

@@ -23,7 +23,7 @@ func TestIntegrationContactsCRUD(t *testing.T) {
 		t.Fatalf("migrate up: %v", err)
 	}
 
-	company, err := store.CreateCompany(ctx, CompanyParams{Name: "Acme Corp", Slug: "acmecorp"})
+	company, err := store.CreateCompany(ctx, store.Pool, CompanyParams{Name: "Acme Corp", Slug: "acmecorp"})
 	if err != nil {
 		t.Fatalf("create company: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestIntegrationContactsCRUD(t *testing.T) {
 		Notes:     "met at meetup",
 	}
 
-	created, err := store.CreateContact(ctx, params)
+	created, err := store.CreateContact(ctx, store.Pool, params)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestIntegrationContactsCRUD(t *testing.T) {
 
 	// Second contact, no company, to exercise NULL FK handling and List
 	// ordering.
-	second, err := store.CreateContact(ctx, ContactParams{Name: "Bob Example"})
+	second, err := store.CreateContact(ctx, store.Pool, ContactParams{Name: "Bob Example"})
 	if err != nil {
 		t.Fatalf("create second: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestIntegrationContactsCompanyFKBehavior(t *testing.T) {
 	// A company_id referencing no company surfaces as ErrNotFound, with a
 	// message that names the company so the caller isn't left guessing.
 	ghost := "00000000-0000-0000-0000-000000000000"
-	_, err := store.CreateContact(ctx, ContactParams{Name: "Carol Example", CompanyID: &ghost})
+	_, err := store.CreateContact(ctx, store.Pool, ContactParams{Name: "Carol Example", CompanyID: &ghost})
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("create with dangling company_id: want ErrNotFound, got %v", err)
 	}
@@ -151,11 +151,11 @@ func TestIntegrationContactsCompanyFKBehavior(t *testing.T) {
 	}
 
 	// ON DELETE SET NULL: deleting the company nulls the contact's FK.
-	company, err := store.CreateCompany(ctx, CompanyParams{Name: "Acme", Slug: "acme"})
+	company, err := store.CreateCompany(ctx, store.Pool, CompanyParams{Name: "Acme", Slug: "acme"})
 	if err != nil {
 		t.Fatalf("create company: %v", err)
 	}
-	contact, err := store.CreateContact(ctx, ContactParams{Name: "Carol Example", CompanyID: &company.ID})
+	contact, err := store.CreateContact(ctx, store.Pool, ContactParams{Name: "Carol Example", CompanyID: &company.ID})
 	if err != nil {
 		t.Fatalf("create contact: %v", err)
 	}

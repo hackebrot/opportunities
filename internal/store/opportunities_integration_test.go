@@ -16,7 +16,7 @@ import (
 // seedCompany inserts a company and returns its id, for opportunity FKs.
 func seedCompany(ctx context.Context, t *testing.T, s *Store, name, slug string) string {
 	t.Helper()
-	c, err := s.CreateCompany(ctx, CompanyParams{Name: name, Slug: slug})
+	c, err := s.CreateCompany(ctx, s.Pool, CompanyParams{Name: name, Slug: slug})
 	if err != nil {
 		t.Fatalf("seed company: %v", err)
 	}
