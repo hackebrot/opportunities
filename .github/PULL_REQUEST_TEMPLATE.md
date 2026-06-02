@@ -1,8 +1,9 @@
 <!--
-Before opening: set one type label (feature/bug/refactor/documentation/test/ci),
-one or more area:* labels, and the matching milestone. See CONTRIBUTING.md
-for the full rules. Reference the issue with `Closes #N` so the merge
-auto-closes it.
+Before opening: set the matching milestone and the labels required by
+CONTRIBUTING.md (type label by branch prefix, `area:*` per package
+touched OR `project` for repo-level changes, plus any quality labels).
+If a linked issue exists, keep the trailing `Closes #N` so the merge
+auto-closes it; otherwise remove that line.
 -->
 
 ## Summary

@@ -92,6 +92,6 @@ When proposing `gh pr create`, include `--label` and `--milestone` flags
 per the rules in `CONTRIBUTING.md` (`## Issues, milestones, PRs`) — set
 them at creation time, not after. The `--body` must follow
 `.github/PULL_REQUEST_TEMPLATE.md` (Summary bullets, Test plan with
-non-CI checks, trailing `Closes #N`).
+non-CI checks, and a trailing `Closes #N` only if a linked issue exists).
 
 Never use `git add -A` or `git add .` — always stage by file name.
