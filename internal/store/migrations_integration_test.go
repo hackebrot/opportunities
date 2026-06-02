@@ -37,8 +37,8 @@ func TestIntegrationMigrationsRoundTrip(t *testing.T) {
 	if err := store.MigrateUp(ctx); err != nil {
 		t.Fatalf("migrate up: %v", err)
 	}
-	if diff := cmp.Diff(expectedTables, listAppTables(ctx, t, store.Pool)); diff != "" {
-		t.Fatalf("tables after up (-want +got):\n%s", diff)
+	if got := listAppTables(ctx, t, store.Pool); !cmp.Equal(expectedTables, got) {
+		t.Fatalf("tables after up (-want +got):\n%s", cmp.Diff(expectedTables, got))
 	}
 
 	if err := store.MigrateDownTo(ctx, 0); err != nil {
@@ -52,8 +52,8 @@ func TestIntegrationMigrationsRoundTrip(t *testing.T) {
 	if err := store.MigrateUp(ctx); err != nil {
 		t.Fatalf("migrate up (second time): %v", err)
 	}
-	if diff := cmp.Diff(expectedTables, listAppTables(ctx, t, store.Pool)); diff != "" {
-		t.Fatalf("tables after second up (-want +got):\n%s", diff)
+	if got := listAppTables(ctx, t, store.Pool); !cmp.Equal(expectedTables, got) {
+		t.Fatalf("tables after second up (-want +got):\n%s", cmp.Diff(expectedTables, got))
 	}
 }
 

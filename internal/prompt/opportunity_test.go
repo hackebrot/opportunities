@@ -137,8 +137,8 @@ func TestAddOpportunityInteractivePicksExistingCompanyNoContact(t *testing.T) {
 			Priority:          "normal",
 		},
 	}
-	if diff := cmp.Diff(want, creator.got); diff != "" {
-		t.Fatalf("input mismatch (-want +got):\n%s", diff)
+	if !cmp.Equal(want, creator.got) {
+		t.Fatalf("input mismatch (-want +got):\n%s", cmp.Diff(want, creator.got))
 	}
 }
 
@@ -215,8 +215,8 @@ func TestAddOpportunityNonInteractiveRespectsPrefill(t *testing.T) {
 	if _, err := prompt.AddOpportunity(ctx, creator, in); err != nil {
 		t.Fatalf("AddOpportunity: %v", err)
 	}
-	if diff := cmp.Diff(in, creator.got); diff != "" {
-		t.Fatalf("input mismatch (-want +got):\n%s", diff)
+	if !cmp.Equal(in, creator.got) {
+		t.Fatalf("input mismatch (-want +got):\n%s", cmp.Diff(in, creator.got))
 	}
 }
 

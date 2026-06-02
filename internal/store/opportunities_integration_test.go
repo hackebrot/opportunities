@@ -68,16 +68,16 @@ func TestIntegrationOpportunitiesCRUD(t *testing.T) {
 		CreatedAt:         created.CreatedAt,
 		UpdatedAt:         created.UpdatedAt,
 	}
-	if diff := cmp.Diff(want, created); diff != "" {
-		t.Fatalf("create row (-want +got):\n%s", diff)
+	if !cmp.Equal(want, created) {
+		t.Fatalf("create row (-want +got):\n%s", cmp.Diff(want, created))
 	}
 
 	got, err := store.GetOpportunity(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if diff := cmp.Diff(created, got); diff != "" {
-		t.Fatalf("get round-trip (-want +got):\n%s", diff)
+	if !cmp.Equal(created, got) {
+		t.Fatalf("get round-trip (-want +got):\n%s", cmp.Diff(created, got))
 	}
 
 	// An opportunity with no known role yet: role_title stays null.
@@ -99,8 +99,8 @@ func TestIntegrationOpportunitiesCRUD(t *testing.T) {
 	}
 	// Ordered most-recently-created first.
 	wantList := []model.Opportunity{second, created}
-	if diff := cmp.Diff(wantList, list); diff != "" {
-		t.Fatalf("list (-want +got):\n%s", diff)
+	if !cmp.Equal(wantList, list) {
+		t.Fatalf("list (-want +got):\n%s", cmp.Diff(wantList, list))
 	}
 
 	// Update edits the editable fields and bumps updated_at, leaving

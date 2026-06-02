@@ -63,16 +63,16 @@ func TestIntegrationContactsCRUD(t *testing.T) {
 		CreatedAt:   created.CreatedAt,
 		UpdatedAt:   created.UpdatedAt,
 	}
-	if diff := cmp.Diff(wantCreated, created); diff != "" {
-		t.Fatalf("create row (-want +got):\n%s", diff)
+	if !cmp.Equal(wantCreated, created) {
+		t.Fatalf("create row (-want +got):\n%s", cmp.Diff(wantCreated, created))
 	}
 
 	got, err := store.GetContact(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if diff := cmp.Diff(created, got); diff != "" {
-		t.Fatalf("get round-trip (-want +got):\n%s", diff)
+	if !cmp.Equal(created, got) {
+		t.Fatalf("get round-trip (-want +got):\n%s", cmp.Diff(created, got))
 	}
 
 	// Second contact, no company, to exercise NULL FK handling and List
@@ -94,8 +94,8 @@ func TestIntegrationContactsCRUD(t *testing.T) {
 	}
 	// Ordered by lower(name): "Alice" before "Bob".
 	wantList := []model.Contact{created, second}
-	if diff := cmp.Diff(wantList, list); diff != "" {
-		t.Fatalf("list (-want +got):\n%s", diff)
+	if !cmp.Equal(wantList, list) {
+		t.Fatalf("list (-want +got):\n%s", cmp.Diff(wantList, list))
 	}
 
 	// Update: clear the company association and rename.

@@ -104,8 +104,8 @@ func TestPrintOpportunityJSON(t *testing.T) {
 		CreatedAt:         "2026-05-20T10:30:00Z",
 		UpdatedAt:         "2026-05-20T11:00:00Z",
 	}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("opportunityJSON mismatch (-want +got):\n%s", diff)
+	if !cmp.Equal(want, got) {
+		t.Errorf("opportunityJSON mismatch (-want +got):\n%s", cmp.Diff(want, got))
 	}
 }
 
@@ -179,9 +179,9 @@ func TestSplitNoteArgs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		oppArgs, note := splitNoteArgs(tt.args)
-		if diff := cmp.Diff(tt.wantOpp, oppArgs); diff != "" || note != tt.wantNote {
+		if !cmp.Equal(tt.wantOpp, oppArgs) || note != tt.wantNote {
 			t.Errorf("splitNoteArgs(%v) note=%q want %q; oppArgs diff (-want +got):\n%s",
-				tt.args, note, tt.wantNote, diff)
+				tt.args, note, tt.wantNote, cmp.Diff(tt.wantOpp, oppArgs))
 		}
 	}
 }

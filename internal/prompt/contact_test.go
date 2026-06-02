@@ -55,8 +55,8 @@ func TestAddContactInteractivePromptsTextFields(t *testing.T) {
 		CompanyID: &companyID,
 		Notes:     "met at conf",
 	}
-	if diff := cmp.Diff(want, creator.got); diff != "" {
-		t.Fatalf("CreateContact input (-want +got):\n%s", diff)
+	if !cmp.Equal(want, creator.got) {
+		t.Fatalf("CreateContact input (-want +got):\n%s", cmp.Diff(want, creator.got))
 	}
 	if got.ID != "k1" {
 		t.Fatalf("returned contact ID = %q, want k1", got.ID)
@@ -83,8 +83,8 @@ func TestAddContactPrefillSkipsPrompt(t *testing.T) {
 	if len(stub.titles) != 0 {
 		t.Fatalf("expected no prompts, got %v", stub.titles)
 	}
-	if diff := cmp.Diff(in, creator.got); diff != "" {
-		t.Fatalf("CreateContact input (-want +got):\n%s", diff)
+	if !cmp.Equal(in, creator.got) {
+		t.Fatalf("CreateContact input (-want +got):\n%s", cmp.Diff(in, creator.got))
 	}
 }
 

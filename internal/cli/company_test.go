@@ -77,8 +77,8 @@ func TestPrintCompanyJSON(t *testing.T) {
 		CreatedAt:      "2026-05-20T10:30:00Z",
 		UpdatedAt:      "2026-05-20T11:00:00Z",
 	}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("companyJSON mismatch (-want +got):\n%s", diff)
+	if !cmp.Equal(want, got) {
+		t.Errorf("companyJSON mismatch (-want +got):\n%s", cmp.Diff(want, got))
 	}
 }
 
