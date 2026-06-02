@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"sort"
-	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -379,6 +378,8 @@ func newOpportunityEventCreateCmd() *cobra.Command {
 // safely distinguish a UUID from a single-word note. Convention: pass
 // the id when supplying both; with a single positional, treat it as the
 // note text and let resolveOpportunity prompt or auto-select.
+// Multi-word note text must be quoted — cobra's MaximumNArgs(2) rejects
+// more than two positionals.
 func splitNoteArgs(args []string) ([]string, string) {
 	switch len(args) {
 	case 0:
@@ -386,7 +387,7 @@ func splitNoteArgs(args []string) ([]string, string) {
 	case 1:
 		return nil, args[0]
 	default:
-		return []string{args[0]}, strings.Join(args[1:], " ")
+		return []string{args[0]}, args[1]
 	}
 }
 

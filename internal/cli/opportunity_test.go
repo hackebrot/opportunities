@@ -175,7 +175,7 @@ func TestSplitNoteArgs(t *testing.T) {
 	}{
 		{nil, nil, ""},
 		{[]string{"hello world"}, nil, "hello world"},
-		{[]string{"oppid", "hello", "world"}, []string{"oppid"}, "hello world"},
+		{[]string{"oppid", "hello world"}, []string{"oppid"}, "hello world"},
 	}
 	for _, tt := range tests {
 		oppArgs, note := splitNoteArgs(tt.args)
