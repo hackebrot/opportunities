@@ -33,6 +33,10 @@ func translateOpportunityContactErr(op string, err error) error {
 		case pgForeignKeyViolation:
 			return fmt.Errorf("%w: opportunity or contact does not exist", ErrNotFound)
 		case pgCheckViolation:
+			// Defense-in-depth: the service rejects unknown relationships
+			// via validRelationships before reaching the store. A CHECK
+			// violation here means the schema enum and the service enum
+			// have drifted; ErrConflict is the closest existing sentinel.
 			return fmt.Errorf("%w: invalid relationship", ErrConflict)
 		}
 	}
