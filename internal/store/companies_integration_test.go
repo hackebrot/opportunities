@@ -53,16 +53,16 @@ func TestIntegrationCompaniesCRUD(t *testing.T) {
 		CreatedAt:      created.CreatedAt,
 		UpdatedAt:      created.UpdatedAt,
 	}
-	if diff := cmp.Diff(wantCreated, created); diff != "" {
-		t.Fatalf("create row (-want +got):\n%s", diff)
+	if !cmp.Equal(wantCreated, created) {
+		t.Fatalf("create row (-want +got):\n%s", cmp.Diff(wantCreated, created))
 	}
 
 	got, err := store.GetCompany(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if diff := cmp.Diff(created, got); diff != "" {
-		t.Fatalf("get round-trip (-want +got):\n%s", diff)
+	if !cmp.Equal(created, got) {
+		t.Fatalf("get round-trip (-want +got):\n%s", cmp.Diff(created, got))
 	}
 
 	// Second company, no preferred_email, to exercise NULL handling
@@ -83,8 +83,8 @@ func TestIntegrationCompaniesCRUD(t *testing.T) {
 		t.Fatalf("list: %v", err)
 	}
 	wantList := []model.Company{created, second}
-	if diff := cmp.Diff(wantList, list); diff != "" {
-		t.Fatalf("list (-want +got):\n%s", diff)
+	if !cmp.Equal(wantList, list) {
+		t.Fatalf("list (-want +got):\n%s", cmp.Diff(wantList, list))
 	}
 
 	updateParams := params

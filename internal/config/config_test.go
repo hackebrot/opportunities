@@ -23,8 +23,8 @@ func TestLoadFromDefaultsWhenFileMissing(t *testing.T) {
 		t.Fatalf("LoadFrom: %v", err)
 	}
 
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("Config mismatch (-want +got):\n%s", diff)
+	if !cmp.Equal(want, got) {
+		t.Errorf("Config mismatch (-want +got):\n%s", cmp.Diff(want, got))
 	}
 }
 
@@ -70,8 +70,8 @@ active_application_stale_after = "21d"
 		t.Fatalf("LoadFrom: %v", err)
 	}
 
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("Config mismatch (-want +got):\n%s", diff)
+	if !cmp.Equal(want, got) {
+		t.Errorf("Config mismatch (-want +got):\n%s", cmp.Diff(want, got))
 	}
 }
 
@@ -101,11 +101,11 @@ referral = 0.95
 		t.Fatalf("LoadFrom: %v", err)
 	}
 
-	if diff := cmp.Diff(want.Compensation.FXRates, got.Compensation.FXRates); diff != "" {
-		t.Errorf("FXRates mismatch (-want +got):\n%s", diff)
+	if !cmp.Equal(want.Compensation.FXRates, got.Compensation.FXRates) {
+		t.Errorf("FXRates mismatch (-want +got):\n%s", cmp.Diff(want.Compensation.FXRates, got.Compensation.FXRates))
 	}
-	if diff := cmp.Diff(want.Ranking.SourceWeights, got.Ranking.SourceWeights); diff != "" {
-		t.Errorf("SourceWeights mismatch (-want +got):\n%s", diff)
+	if !cmp.Equal(want.Ranking.SourceWeights, got.Ranking.SourceWeights) {
+		t.Errorf("SourceWeights mismatch (-want +got):\n%s", cmp.Diff(want.Ranking.SourceWeights, got.Ranking.SourceWeights))
 	}
 }
 
@@ -145,8 +145,8 @@ port = 9090
 		t.Fatalf("LoadFrom: %v", err)
 	}
 
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("Config mismatch (-want +got):\n%s", diff)
+	if !cmp.Equal(want, got) {
+		t.Errorf("Config mismatch (-want +got):\n%s", cmp.Diff(want, got))
 	}
 }
 
@@ -163,8 +163,8 @@ func TestLoadFromInvalidTOML(t *testing.T) {
 		t.Fatal("LoadFrom: expected error for invalid TOML, got nil")
 	}
 
-	if diff := cmp.Diff(config.Config{}, got); diff != "" {
-		t.Errorf("expected zero Config on error (-want +got):\n%s", diff)
+	if !cmp.Equal(config.Config{}, got) {
+		t.Errorf("expected zero Config on error (-want +got):\n%s", cmp.Diff(config.Config{}, got))
 	}
 }
 
@@ -181,8 +181,8 @@ func TestLoadFromInvalidHTTPPortEnv(t *testing.T) {
 		t.Errorf("error should attribute the source env var, got: %v", err)
 	}
 
-	if diff := cmp.Diff(config.Config{}, got); diff != "" {
-		t.Errorf("expected zero Config on error (-want +got):\n%s", diff)
+	if !cmp.Equal(config.Config{}, got) {
+		t.Errorf("expected zero Config on error (-want +got):\n%s", cmp.Diff(config.Config{}, got))
 	}
 }
 
@@ -208,8 +208,8 @@ func TestLoadFromHTTPPortOutOfRangeEnv(t *testing.T) {
 			if !strings.Contains(err.Error(), "OPPS_HTTP_PORT") {
 				t.Errorf("error should attribute the source env var, got: %v", err)
 			}
-			if diff := cmp.Diff(config.Config{}, got); diff != "" {
-				t.Errorf("expected zero Config on error (-want +got):\n%s", diff)
+			if !cmp.Equal(config.Config{}, got) {
+				t.Errorf("expected zero Config on error (-want +got):\n%s", cmp.Diff(config.Config{}, got))
 			}
 		})
 	}
@@ -237,8 +237,8 @@ func TestLoadFromHTTPPortOutOfRangeFile(t *testing.T) {
 			if err == nil {
 				t.Fatal("LoadFrom: expected error for out-of-range port, got nil")
 			}
-			if diff := cmp.Diff(config.Config{}, got); diff != "" {
-				t.Errorf("expected zero Config on error (-want +got):\n%s", diff)
+			if !cmp.Equal(config.Config{}, got) {
+				t.Errorf("expected zero Config on error (-want +got):\n%s", cmp.Diff(config.Config{}, got))
 			}
 		})
 	}

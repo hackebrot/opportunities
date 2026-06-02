@@ -78,8 +78,8 @@ func TestAddCompanyInteractivePromptsAllFields(t *testing.T) {
 		PreferredEmail: "hi+foo@example.com",
 		Notes:          "met at meetup",
 	}
-	if diff := cmp.Diff(want, creator.got); diff != "" {
-		t.Fatalf("CreateCompany input (-want +got):\n%s", diff)
+	if !cmp.Equal(want, creator.got) {
+		t.Fatalf("CreateCompany input (-want +got):\n%s", cmp.Diff(want, creator.got))
 	}
 	if got.ID != "c1" {
 		t.Fatalf("returned company ID = %q, want c1", got.ID)
@@ -107,8 +107,8 @@ func TestAddCompanyPrefillSkipsPrompt(t *testing.T) {
 	if len(stub.titles) != 0 {
 		t.Fatalf("expected no prompts, got %v", stub.titles)
 	}
-	if diff := cmp.Diff(in, creator.got); diff != "" {
-		t.Fatalf("CreateCompany input (-want +got):\n%s", diff)
+	if !cmp.Equal(in, creator.got) {
+		t.Fatalf("CreateCompany input (-want +got):\n%s", cmp.Diff(in, creator.got))
 	}
 }
 
