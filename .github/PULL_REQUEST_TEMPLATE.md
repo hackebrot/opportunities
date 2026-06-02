@@ -1,7 +1,8 @@
 <!--
 Before opening: set the matching milestone and the labels required by
-CONTRIBUTING.md (type label by branch prefix, `area:*` per package
-touched OR `project` for repo-level changes, plus any quality labels).
+CONTRIBUTING.md (type label by branch prefix — `chore`/`build` may go
+unlabeled; `area:*` per package touched OR `project` for repo-level
+changes; plus any quality labels).
 If a linked issue exists, keep the trailing `Closes #N` so the merge
 auto-closes it; otherwise remove that line.
 -->
@@ -23,4 +24,4 @@ Additional checks not covered by CI:
 - [ ] Manual verification — note commands and observed result.
 
 <!-- Remove the line below if there is no linked issue. -->
-Closes #
+Closes #N
