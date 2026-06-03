@@ -59,6 +59,7 @@ func newOpportunityCmd() *cobra.Command {
 		newOpportunityArchiveCmd(),
 		newOpportunityNoteCmd(),
 		newOpportunityEventCmd(),
+		newOpportunityContactCmd(),
 	)
 	return cmd
 }
