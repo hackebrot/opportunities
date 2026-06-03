@@ -68,8 +68,8 @@ func TestIntegrationCompaniesCRUD(t *testing.T) {
 	// Second company, no preferred_email, to exercise NULL handling
 	// and List ordering.
 	second, err := store.CreateCompany(ctx, store.Pool, CompanyParams{
-		Name: "Beta Labs",
-		Slug: "betalabs",
+		Name: "Example Corp",
+		Slug: "examplecorp",
 	})
 	if err != nil {
 		t.Fatalf("create second: %v", err)
