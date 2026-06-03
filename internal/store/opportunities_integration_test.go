@@ -267,16 +267,13 @@ func TestIntegrationInsertEventCrossOpportunityApplication(t *testing.T) {
 		t.Fatalf("insert opportunity B: %v", err)
 	}
 
-	// Application that belongs to opportunity A. Inserted directly: there
-	// is no application store layer yet.
-	var appID string
-	if err := store.Pool.QueryRow(
-		ctx,
-		`INSERT INTO applications (opportunity_id, status) VALUES ($1, 'applied') RETURNING id`,
-		oppA.ID,
-	).Scan(&appID); err != nil {
+	// Application that belongs to opportunity A.
+	app, err := store.InsertApplication(ctx, store.Pool,
+		ApplicationParams{OpportunityID: oppA.ID}, "applied")
+	if err != nil {
 		t.Fatalf("seed application: %v", err)
 	}
+	appID := app.ID
 
 	// Event for opportunity B referencing A's application: the composite FK
 	// rejects it. opportunity_id is valid, so this is a conflict, not a
