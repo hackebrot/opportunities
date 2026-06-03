@@ -12,6 +12,14 @@ var (
 	// ErrConflict is returned when an insert or update violates a
 	// unique constraint (e.g. duplicate company slug).
 	ErrConflict = errors.New("store: conflict")
+
+	// ErrActiveExists is returned when an applications insert would
+	// violate the partial unique index uq_active_app_per_opportunity —
+	// the opportunity already has an application in an active status
+	// (applied/in_progress/offer). Distinct from ErrConflict so callers
+	// can present the user-facing "you already have an open application
+	// for this opportunity" message instead of a generic conflict.
+	ErrActiveExists = errors.New("store: active application already exists")
 )
 
 // SQLSTATE codes (class 23 — integrity constraint violation): 23505
