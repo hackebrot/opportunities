@@ -96,4 +96,13 @@ func TestIntegrationOpportunityContactsAttachDetachList(t *testing.T) {
 	if err := svc.DetachOpportunityContact(ctx, opp.ID, alice.ID, ""); !errors.Is(err, service.ErrValidation) {
 		t.Fatalf("detach empty relationship: want ErrValidation, got %v", err)
 	}
+
+	// Whitespace on either side of relationship is forgiven so a CLI
+	// flag value like "recruiter " doesn't trip the enum check.
+	if err := svc.AttachOpportunityContact(ctx, opp.ID, alice.ID, "  recruiter  "); err != nil {
+		t.Fatalf("attach with padded relationship: %v", err)
+	}
+	if err := svc.DetachOpportunityContact(ctx, opp.ID, alice.ID, "  recruiter  "); err != nil {
+		t.Fatalf("detach with padded relationship: %v", err)
+	}
 }

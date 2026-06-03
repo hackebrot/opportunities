@@ -16,6 +16,7 @@ import (
 func (s *Service) AttachOpportunityContact(ctx context.Context, oppID, contactID, relationship string) error {
 	oppID = strings.TrimSpace(oppID)
 	contactID = strings.TrimSpace(contactID)
+	relationship = strings.TrimSpace(relationship)
 	if err := s.validateOpportunityContact(oppID, contactID, relationship); err != nil {
 		return err
 	}
@@ -30,6 +31,7 @@ func (s *Service) AttachOpportunityContact(ctx context.Context, oppID, contactID
 func (s *Service) DetachOpportunityContact(ctx context.Context, oppID, contactID, relationship string) error {
 	oppID = strings.TrimSpace(oppID)
 	contactID = strings.TrimSpace(contactID)
+	relationship = strings.TrimSpace(relationship)
 	if err := s.validateOpportunityContact(oppID, contactID, relationship); err != nil {
 		return err
 	}
