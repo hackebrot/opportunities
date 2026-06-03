@@ -83,17 +83,24 @@ func newOpportunityContactDetachCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&oppFlag, "opportunity", "", "ID of the opportunity")
-	cmd.Flags().StringVar(&relationship, "as", "", "Relationship to detach (required)")
+	cmd.Flags().StringVar(&relationship, "as", "", "Relationship to detach (required non-interactively; prompted otherwise)")
 	return cmd
 }
 
 // resolveOpportunityContactArgs centralizes the picker rules shared by
-// attach and detach: interactive mode prompts for any missing piece,
-// non-interactive mode requires all three. For detach we restrict the
-// contact picker to the contacts already attached and the relationship
-// picker to the relationships actually in use on the picked
-// (opportunity, contact) pair — otherwise the user would see options
-// that don't correspond to any row.
+// attach and detach.
+//
+// Interactive mode prompts for any missing piece. Non-interactive mode
+// inherits the project-wide resolve convention: PickEntity auto-selects
+// when exactly one row exists, otherwise fails with ErrNonInteractive —
+// the caller must supply the contact arg and --opportunity. Detach
+// additionally requires --as in non-interactive mode because the PK is
+// the triple; the value cannot be inferred from the row count.
+//
+// For detach we restrict the contact picker to the contacts already
+// attached and the relationship picker to the relationships actually in
+// use on the picked (opportunity, contact) pair — otherwise the user
+// would see options that don't correspond to any row.
 func resolveOpportunityContactArgs(
 	ctx context.Context,
 	svc *service.Service,
