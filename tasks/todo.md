@@ -80,7 +80,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
 
 ## M1/P4 — Applications & terminal events
 
-- [ ] **T15** (#15) — Applications store + service create + `applied` event +
+- [x] **T15** (#15) — Applications store + service create + `applied` event +
       `ErrActiveExists` translation. Concurrent regression test. **No CLI
       in this task.** Also replace the raw `INSERT INTO applications` in
       `TestIntegrationInsertEventCrossOpportunityApplication`
