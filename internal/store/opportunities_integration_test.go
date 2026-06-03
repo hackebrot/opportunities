@@ -13,16 +13,6 @@ import (
 	"github.com/hackebrot/opportunities/internal/model"
 )
 
-// seedCompany inserts a company and returns its id, for opportunity FKs.
-func seedCompany(ctx context.Context, t *testing.T, s *Store, name, slug string) string {
-	t.Helper()
-	c, err := s.CreateCompany(ctx, s.Pool, CompanyParams{Name: name, Slug: slug})
-	if err != nil {
-		t.Fatalf("seed company: %v", err)
-	}
-	return c.ID
-}
-
 func TestIntegrationOpportunitiesCRUD(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
