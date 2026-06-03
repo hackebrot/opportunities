@@ -224,11 +224,24 @@ func uniqueAttachedContacts(rows []model.OpportunityContact) []model.Opportunity
 }
 
 func relationshipsForContact(rows []model.OpportunityContact, contactID string) []prompt.Option {
+	opts := opportunityRelationshipOptions()
+	labels := make(map[string]string, len(opts))
+	for _, opt := range opts {
+		labels[opt.Key] = opt.Label
+	}
 	var out []prompt.Option
 	for _, r := range rows {
-		if r.ContactID == contactID {
-			out = append(out, prompt.Option{Key: r.Relationship, Label: r.Relationship})
+		if r.ContactID != contactID {
+			continue
 		}
+		label, ok := labels[r.Relationship]
+		if !ok {
+			// Forward-compat: if the schema gains a relationship value
+			// the CLI's label map hasn't learned yet, show the raw key
+			// rather than silently dropping the row.
+			label = r.Relationship
+		}
+		out = append(out, prompt.Option{Key: r.Relationship, Label: label})
 	}
 	return out
 }

@@ -62,13 +62,28 @@ func TestRelationshipsForContact(t *testing.T) {
 		{ContactID: "bob", Relationship: "hiring_manager"},
 	}
 	want := []prompt.Option{
-		{Key: "interviewer", Label: "interviewer"},
-		{Key: "recruiter", Label: "recruiter"},
+		{Key: "interviewer", Label: "Interviewer"},
+		{Key: "recruiter", Label: "Recruiter"},
 	}
 	if diff := cmp.Diff(want, relationshipsForContact(rows, "alice")); diff != "" {
 		t.Errorf("relationshipsForContact (-want +got):\n%s", diff)
 	}
 	if got := relationshipsForContact(rows, "carol"); len(got) != 0 {
 		t.Errorf("unknown contact: got %v, want empty", got)
+	}
+}
+
+// TestRelationshipsForContactUnknownKey covers the forward-compat path —
+// a schema relationship the CLI label map hasn't learned yet falls back
+// to the raw key rather than silently disappearing.
+func TestRelationshipsForContactUnknownKey(t *testing.T) {
+	t.Parallel()
+
+	rows := []model.OpportunityContact{
+		{ContactID: "alice", Relationship: "future_role"},
+	}
+	got := relationshipsForContact(rows, "alice")
+	if len(got) != 1 || got[0].Key != "future_role" || got[0].Label != "future_role" {
+		t.Fatalf("unknown key: got %+v, want one row labelled with the raw key", got)
 	}
 }
