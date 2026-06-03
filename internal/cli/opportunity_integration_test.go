@@ -185,6 +185,108 @@ func TestIntegrationOpportunityCRUDViaCLI(t *testing.T) {
 	}
 }
 
+// TestIntegrationOpportunityContactAttachDetachViaCLI exercises the
+// secondary attach/detach path through the CLI: create an opportunity
+// without a contact, attach one via `opps opportunity contact attach`,
+// then detach with `--as` to remove that specific relationship while
+// leaving any others intact.
+func TestIntegrationOpportunityContactAttachDetachViaCLI(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+
+	dsn := st.Pool.Config().ConnString()
+	t.Setenv("OPPS_DATABASE_URL", dsn)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	companyOut := runCmd(ctx, t, "--non-interactive", "company", "create",
+		"--name", "Acme Corp", "--json")
+	companyID := decodeCompanyJSON(t, companyOut).ID
+
+	contactOut := runCmd(ctx, t, "--non-interactive", "contact", "create",
+		"--name", "Alice Example", "--company", companyID, "--json")
+	contactID := decodeContactJSON(t, contactOut).ID
+
+	createOut := runCmd(
+		ctx, t,
+		"--non-interactive", "opportunity", "create",
+		"--company", companyID,
+		"--role-title", "Staff Engineer",
+		"--office-days-per-week", "0",
+		"--source", "outbound",
+		"--json",
+	)
+	oppID := decodeOpportunityJSON(t, createOut).ID
+
+	// Attach the same contact under two relationships.
+	if _, err := tryRun(ctx, t, "--non-interactive",
+		"opportunity", "contact", "attach", contactID,
+		"--opportunity", oppID, "--as", "recruiter"); err != nil {
+		t.Fatalf("attach recruiter: %v", err)
+	}
+	if _, err := tryRun(ctx, t, "--non-interactive",
+		"opportunity", "contact", "attach", contactID,
+		"--opportunity", oppID, "--as", "interviewer"); err != nil {
+		t.Fatalf("attach interviewer: %v", err)
+	}
+
+	countRows := func(t *testing.T) int {
+		t.Helper()
+		var n int
+		if err := st.Pool.QueryRow(
+			ctx,
+			`SELECT count(*) FROM opportunity_contacts WHERE opportunity_id = $1`, oppID,
+		).Scan(&n); err != nil {
+			t.Fatalf("count rows: %v", err)
+		}
+		return n
+	}
+
+	if got := countRows(t); got != 2 {
+		t.Fatalf("after attach: rows = %d, want 2", got)
+	}
+
+	// Detach without --as in non-interactive mode must fail (PK is the
+	// triple — refusing to guess is the safe default).
+	if _, err := tryRun(ctx, t, "--non-interactive",
+		"opportunity", "contact", "detach", contactID,
+		"--opportunity", oppID); err == nil {
+		t.Fatal("detach without --as: expected error")
+	}
+
+	// Detach the recruiter relationship; interviewer must remain.
+	if _, err := tryRun(ctx, t, "--non-interactive",
+		"opportunity", "contact", "detach", contactID,
+		"--opportunity", oppID, "--as", "recruiter"); err != nil {
+		t.Fatalf("detach recruiter: %v", err)
+	}
+	var remaining string
+	if err := st.Pool.QueryRow(
+		ctx,
+		`SELECT relationship FROM opportunity_contacts WHERE opportunity_id = $1`, oppID,
+	).Scan(&remaining); err != nil {
+		t.Fatalf("query remaining: %v", err)
+	}
+	if remaining != "interviewer" {
+		t.Fatalf("remaining = %q, want interviewer", remaining)
+	}
+	if got := countRows(t); got != 1 {
+		t.Fatalf("after detach: rows = %d, want 1", got)
+	}
+
+	// Detaching a row that isn't there surfaces as a runtime error
+	// (store.ErrNotFound under the hood). The CLI propagates it.
+	if _, err := tryRun(ctx, t, "--non-interactive",
+		"opportunity", "contact", "detach", contactID,
+		"--opportunity", oppID, "--as", "recruiter"); err == nil {
+		t.Fatal("detach already-detached row: expected error")
+	}
+}
+
 type opportunityJSONShape struct {
 	ID           string  `json:"id"`
 	CompanyID    string  `json:"company_id"`

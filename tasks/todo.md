@@ -70,7 +70,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
       parent with `create | list | show | update | rm | archive | note |
       event create` subcommands (M1 kinds only). The "recruiter messaged
       me" scenario becomes one command.
-- [ ] **T14** (#14) — `opps opportunity contact attach` /
+- [x] **T14** (#14) — `opps opportunity contact attach` /
       `opps opportunity contact detach`: secondary path for adjusting
       links after creation. `--as <relationship>` required on detach
       (PK-driven).
