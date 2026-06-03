@@ -90,6 +90,10 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
       the transition table (interview kinds, offer/counter, accepted,
       rejected/declined/withdrawn with `archive_reason_category`).
       Table-driven tests; `archived_at = events.occurred_at` mirroring.
+      Also replace the raw `UPDATE applications` in
+      `TestIntegrationAddApplicationReapply`
+      (`internal/service/applications_integration_test.go`) with a call
+      through the new rejected/declined/withdrawn service surface.
 - [ ] **T17** (#17) — `opps opportunity apply` + `opps opportunity event
       create` app-scoped contextual menu. Top-level `opps apply`
       registered as alias.
