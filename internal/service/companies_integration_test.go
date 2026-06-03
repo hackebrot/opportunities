@@ -10,7 +10,6 @@ import (
 
 	"github.com/hackebrot/opportunities/internal/service"
 	"github.com/hackebrot/opportunities/internal/store"
-	"github.com/hackebrot/opportunities/internal/testutil"
 )
 
 // TestIntegrationCreateCompanyUniqueSlug proves the full pipeline:
@@ -44,21 +43,4 @@ func TestIntegrationCreateCompanyUniqueSlug(t *testing.T) {
 	if _, err := svc.CreateCompany(ctx, service.CompanyInput{Name: "  foo   corp  "}); !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("third create (whitespace variant): err=%v, want store.ErrConflict", err)
 	}
-}
-
-// startPostgresStore opens a *store.Store against an ephemeral Postgres
-// container (see testutil.StartPostgres). Released on test cleanup.
-func startPostgresStore(ctx context.Context, t *testing.T) *store.Store {
-	t.Helper()
-
-	s, err := store.Open(ctx, testutil.StartPostgres(ctx, t))
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	t.Cleanup(s.Close)
-
-	if err := s.Pool.Ping(ctx); err != nil {
-		t.Fatalf("ping: %v", err)
-	}
-	return s
 }

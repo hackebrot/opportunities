@@ -12,36 +12,6 @@ import (
 	"github.com/hackebrot/opportunities/internal/store"
 )
 
-// seedOpportunity is the boilerplate every events test needs: a company
-// and a freshly-added opportunity (latest_status "watching", one "added"
-// event already written by AddOpportunity).
-func seedOpportunity(ctx context.Context, t *testing.T, svc *service.Service) string {
-	t.Helper()
-	company, err := svc.CreateCompany(ctx, service.CompanyInput{Name: "Acme Corp"})
-	if err != nil {
-		t.Fatalf("create company: %v", err)
-	}
-	opp, err := svc.AddOpportunity(ctx, service.OpportunityCreationInput{
-		Company:     service.OpportunityCompanyChoice{ID: company.ID},
-		Opportunity: service.OpportunityInput{Source: "outbound"},
-	})
-	if err != nil {
-		t.Fatalf("add opportunity: %v", err)
-	}
-	return opp.ID
-}
-
-// readOpportunityLatestStatus is the post-state probe used by every
-// happy-path assertion: did AppendEvent flip latest_status correctly?
-func readOpportunityLatestStatus(ctx context.Context, t *testing.T, st *store.Store, oppID string) string {
-	t.Helper()
-	opp, err := st.GetOpportunity(ctx, oppID)
-	if err != nil {
-		t.Fatalf("get opportunity: %v", err)
-	}
-	return opp.LatestStatus
-}
-
 func TestIntegrationAppendEventExploring(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
