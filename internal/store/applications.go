@@ -151,9 +151,15 @@ func translateApplicationErr(op string, err error) error {
 	if pg, ok := errors.AsType[*pgconn.PgError](err); ok {
 		switch pg.Code {
 		case pgUniqueViolation:
-			// uq_active_app_per_opportunity is the only unique constraint
-			// on this table: another active application already exists.
-			return ErrActiveExists
+			// The partial unique index enforces one active application per
+			// opportunity; everything else on this table is keyed on a
+			// server-generated UUID and isn't reachable in practice, but
+			// gate on the constraint name so a future schema change can't
+			// silently widen ErrActiveExists.
+			if pg.ConstraintName == "uq_active_app_per_opportunity" {
+				return ErrActiveExists
+			}
+			return fmt.Errorf("%w: %s", ErrConflict, pg.ConstraintName)
 		case pgForeignKeyViolation:
 			// opportunity_id pointed at an opportunity that doesn't
 			// exist. Name the entity so the caller isn't left guessing.
