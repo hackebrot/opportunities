@@ -174,15 +174,25 @@ func TestIntegrationAppendEventValidation(t *testing.T) {
 		t.Fatalf("missing opportunity: want ErrValidation, got %v", err)
 	}
 
-	// Application-tied kinds are rejected with ErrValidation until the
-	// applications layer wires them in.
+	// `applied` is reserved for AddApplication so the partial-unique-index
+	// guard runs as part of the insert; AppendEvent rejects it as a
+	// validation error regardless of state.
 	oppID := seedOpportunity(ctx, t, svc)
-	for _, kind := range []string{"applied", "screen", "offer", "accepted", "rejected"} {
+	if _, err := svc.AppendEvent(ctx, service.EventInput{
+		OpportunityID: oppID,
+		Kind:          "applied",
+	}); !errors.Is(err, service.ErrValidation) {
+		t.Fatalf("kind \"applied\": want ErrValidation, got %v", err)
+	}
+
+	// The other application-tied kinds are well-formed but require an
+	// active application; without one they fail the precondition.
+	for _, kind := range []string{"screen", "offer", "accepted", "rejected", "withdrawn"} {
 		if _, err := svc.AppendEvent(ctx, service.EventInput{
 			OpportunityID: oppID,
 			Kind:          kind,
-		}); !errors.Is(err, service.ErrValidation) {
-			t.Fatalf("kind %q: want ErrValidation, got %v", kind, err)
+		}); !errors.Is(err, service.ErrPrecondition) {
+			t.Fatalf("kind %q without active app: want ErrPrecondition, got %v", kind, err)
 		}
 	}
 
