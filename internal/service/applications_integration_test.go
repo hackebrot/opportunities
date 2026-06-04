@@ -1,0 +1,319 @@
+//go:build integration
+
+package service_test
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/hackebrot/opportunities/internal/service"
+	"github.com/hackebrot/opportunities/internal/store"
+)
+
+// TestIntegrationAddApplication proves AddApplication writes the
+// application (status "applied") and an `applied` event linked to the
+// new application_id in one tx, flips the opportunity's latest_status
+// to "applied", and pins the event timestamp via the injected clock.
+func TestIntegrationAddApplication(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+	svc := service.New(st, testClock)
+	oppID := seedOpportunity(ctx, t, svc)
+
+	appliedAt := time.Date(2026, 5, 1, 9, 0, 0, 0, time.UTC)
+	app, err := svc.AddApplication(ctx, service.ApplicationInput{
+		OpportunityID:    oppID,
+		AppliedAt:        &appliedAt,
+		AppliedWithEmail: "me@example.test",
+		Notes:            "applied via careers page",
+	})
+	if err != nil {
+		t.Fatalf("add application: %v", err)
+	}
+	if app.Status != "applied" {
+		t.Fatalf("application status = %q, want applied", app.Status)
+	}
+	if app.OpportunityID != oppID {
+		t.Fatalf("application opportunity_id = %q, want %q", app.OpportunityID, oppID)
+	}
+
+	// latest_status flips to applied.
+	opp, err := st.GetOpportunity(ctx, oppID)
+	if err != nil {
+		t.Fatalf("get opportunity: %v", err)
+	}
+	if opp.LatestStatus != "applied" {
+		t.Fatalf("latest_status = %q, want applied", opp.LatestStatus)
+	}
+
+	// Exactly one `applied` event with application_id set to the new app
+	// and occurred_at pinned to the injected clock.
+	var (
+		count      int
+		kind       string
+		occurredAt time.Time
+		eventAppID *string
+	)
+	err = st.Pool.QueryRow(ctx, `
+		SELECT count(*) FILTER (WHERE kind = 'applied') OVER (), kind, occurred_at, application_id
+		FROM events
+		WHERE opportunity_id = $1 AND kind = 'applied'`, oppID).
+		Scan(&count, &kind, &occurredAt, &eventAppID)
+	if err != nil {
+		t.Fatalf("query applied event: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("applied event count = %d, want 1", count)
+	}
+	if eventAppID == nil || *eventAppID != app.ID {
+		t.Fatalf("applied event application_id = %v, want %q", eventAppID, app.ID)
+	}
+	if !occurredAt.Equal(testClock.t) {
+		t.Fatalf("applied event occurred_at = %s, want %s", occurredAt, testClock.t)
+	}
+}
+
+// TestIntegrationAddApplicationActiveExists proves back-to-back
+// AddApplication calls on the same opportunity collapse to one win plus
+// store.ErrActiveExists — the partial unique index is the contract.
+func TestIntegrationAddApplicationActiveExists(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+	svc := service.New(st, testClock)
+	oppID := seedOpportunity(ctx, t, svc)
+
+	if _, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID}); err != nil {
+		t.Fatalf("first add: %v", err)
+	}
+	_, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID})
+	if !errors.Is(err, store.ErrActiveExists) {
+		t.Fatalf("second add: want store.ErrActiveExists, got %v", err)
+	}
+
+	// And nothing in events for the second attempt: still exactly one
+	// `applied` event, the one from the first add.
+	var n int
+	if err := st.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM events WHERE opportunity_id = $1 AND kind = 'applied'`, oppID).
+		Scan(&n); err != nil {
+		t.Fatalf("count applied events: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("applied events after conflict = %d, want 1", n)
+	}
+}
+
+// TestIntegrationAddApplicationReapply proves the re-application path:
+// once the first application terminates (status flipped out of the
+// active set), AddApplication succeeds again on the same opportunity.
+func TestIntegrationAddApplicationReapply(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+	svc := service.New(st, testClock)
+	oppID := seedOpportunity(ctx, t, svc)
+
+	first, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID})
+	if err != nil {
+		t.Fatalf("first add: %v", err)
+	}
+
+	// Terminate the first app outside the application service surface:
+	// T15 doesn't ship the rejected transition (T16 does). Driving the
+	// store directly is enough to free the partial-index slot.
+	if _, err := st.Pool.Exec(ctx, `
+		UPDATE applications SET status = 'rejected', archive_reason_category = 'process_ended',
+			archived_at = now() WHERE id = $1`, first.ID); err != nil {
+		t.Fatalf("terminate first: %v", err)
+	}
+
+	second, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID})
+	if err != nil {
+		t.Fatalf("re-apply: %v", err)
+	}
+	if second.ID == first.ID {
+		t.Fatalf("re-apply returned the same row id; want a fresh application")
+	}
+	if second.Status != "applied" {
+		t.Fatalf("re-apply status = %q, want applied", second.Status)
+	}
+	if got := readOpportunityLatestStatus(ctx, t, st, oppID); got != "applied" {
+		t.Fatalf("opportunity latest_status after re-apply = %q, want applied", got)
+	}
+}
+
+// TestIntegrationAddApplicationConcurrent is the partial-index race
+// regression: two goroutines calling AddApplication on the same
+// opportunity collapse to exactly one win and one store.ErrActiveExists.
+// The service-layer "any active app?" check is best-effort; the index
+// is the authority.
+func TestIntegrationAddApplicationConcurrent(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+	svc := service.New(st, testClock)
+	oppID := seedOpportunity(ctx, t, svc)
+
+	var (
+		wg      sync.WaitGroup
+		results = make([]error, 2)
+	)
+	start := make(chan struct{})
+	for i := range results {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			<-start
+			_, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID})
+			results[idx] = err
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	var wins, losses int
+	for _, err := range results {
+		switch {
+		case err == nil:
+			wins++
+		case errors.Is(err, store.ErrActiveExists):
+			losses++
+		default:
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+	if wins != 1 || losses != 1 {
+		t.Fatalf("race: wins=%d losses=%d, want 1/1 (results=%v)", wins, losses, results)
+	}
+
+	// Exactly one row in applications, exactly one `applied` event.
+	var nApps int
+	if err := st.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM applications WHERE opportunity_id = $1`, oppID).
+		Scan(&nApps); err != nil {
+		t.Fatalf("count applications: %v", err)
+	}
+	if nApps != 1 {
+		t.Fatalf("applications after race = %d, want 1", nApps)
+	}
+	var nEvents int
+	if err := st.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM events WHERE opportunity_id = $1 AND kind = 'applied'`, oppID).
+		Scan(&nEvents); err != nil {
+		t.Fatalf("count applied events: %v", err)
+	}
+	if nEvents != 1 {
+		t.Fatalf("applied events after race = %d, want 1", nEvents)
+	}
+}
+
+// TestIntegrationAddApplicationUnknownOpportunity proves AddApplication
+// rejects an unknown opportunity id with store.ErrNotFound and leaves
+// no application or event behind.
+func TestIntegrationAddApplicationUnknownOpportunity(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+	svc := service.New(st, testClock)
+
+	_, err := svc.AddApplication(ctx, service.ApplicationInput{
+		OpportunityID: "00000000-0000-0000-0000-000000000000",
+	})
+	if !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("unknown opportunity: want store.ErrNotFound, got %v", err)
+	}
+
+	for _, table := range []string{"applications", "events"} {
+		var n int
+		if err := st.Pool.QueryRow(ctx, `SELECT count(*) FROM `+table).Scan(&n); err != nil {
+			t.Fatalf("count %s: %v", table, err)
+		}
+		if n != 0 {
+			t.Fatalf("%s after failed add = %d, want 0", table, n)
+		}
+	}
+}
+
+// TestIntegrationAddApplicationArchivedOpportunity proves AddApplication
+// rejects an archived opportunity with ErrPrecondition.
+func TestIntegrationAddApplicationArchivedOpportunity(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+	svc := service.New(st, testClock)
+	oppID := seedOpportunity(ctx, t, svc)
+
+	if _, err := svc.ArchiveOpportunity(ctx, oppID, "delisted"); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+
+	_, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID})
+	if !errors.Is(err, service.ErrPrecondition) {
+		t.Fatalf("apply to archived: want ErrPrecondition, got %v", err)
+	}
+
+	// The tx must roll back: no application row landed.
+	var n int
+	if err := st.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM applications WHERE opportunity_id = $1`, oppID).
+		Scan(&n); err != nil {
+		t.Fatalf("count applications: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("applications after archived-opp reject = %d, want 0", n)
+	}
+}
+
+// TestIntegrationAddApplicationValidation proves invalid input is
+// rejected before any DB write.
+func TestIntegrationAddApplicationValidation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+	svc := service.New(st, testClock)
+
+	if _, err := svc.AddApplication(ctx, service.ApplicationInput{}); !errors.Is(err, service.ErrValidation) {
+		t.Fatalf("missing opportunity: want ErrValidation, got %v", err)
+	}
+
+	var n int
+	if err := st.Pool.QueryRow(ctx, `SELECT count(*) FROM applications`).Scan(&n); err != nil {
+		t.Fatalf("count applications: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("applications after validation failure = %d, want 0", n)
+	}
+}

@@ -10,8 +10,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/hackebrot/opportunities/internal/testutil"
 )
 
 // expectedTables is the schema's table list (excluding goose's own
@@ -55,24 +53,6 @@ func TestIntegrationMigrationsRoundTrip(t *testing.T) {
 	if got := listAppTables(ctx, t, store.Pool); !cmp.Equal(expectedTables, got) {
 		t.Fatalf("tables after second up (-want +got):\n%s", cmp.Diff(expectedTables, got))
 	}
-}
-
-// startPostgresStore opens a *Store against an ephemeral Postgres
-// container (see testutil.StartPostgres). The container and pool are
-// released on test cleanup.
-func startPostgresStore(ctx context.Context, t *testing.T) *Store {
-	t.Helper()
-
-	store, err := Open(ctx, testutil.StartPostgres(ctx, t))
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	t.Cleanup(store.Close)
-
-	if err := store.Pool.Ping(ctx); err != nil {
-		t.Fatalf("ping: %v", err)
-	}
-	return store
 }
 
 // listAppTables returns the user-defined tables in the public schema,
