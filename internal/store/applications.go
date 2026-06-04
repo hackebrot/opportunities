@@ -164,6 +164,11 @@ func translateApplicationErr(op string, err error) error {
 			// opportunity_id pointed at an opportunity that doesn't
 			// exist. Name the entity so the caller isn't left guessing.
 			return fmt.Errorf("%w: unknown opportunity ID", ErrNotFound)
+		case pgCheckViolation:
+			// applications_status_chk / applications_archive_reason_chk:
+			// a bad status or archive_reason landed in the row. Surface
+			// as a conflict instead of leaking the raw driver error.
+			return fmt.Errorf("%w: invalid application (%s)", ErrConflict, pg.ConstraintName)
 		}
 	}
 	return fmt.Errorf("store: %s application: %w", op, err)
