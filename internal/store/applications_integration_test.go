@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -78,7 +79,16 @@ func TestIntegrationApplicationsCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
+	// Match ListApplications' ORDER BY created_at DESC, id so the
+	// expectation survives a microsecond-precision tie between the two
+	// inserts.
 	wantList := []model.Application{second, created}
+	sort.SliceStable(wantList, func(i, j int) bool {
+		if !wantList[i].CreatedAt.Equal(wantList[j].CreatedAt) {
+			return wantList[i].CreatedAt.After(wantList[j].CreatedAt)
+		}
+		return wantList[i].ID < wantList[j].ID
+	})
 	if !cmp.Equal(wantList, list) {
 		t.Fatalf("list (-want +got):\n%s", cmp.Diff(wantList, list))
 	}
