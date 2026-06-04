@@ -205,6 +205,44 @@ func TestIntegrationAppendEventValidation(t *testing.T) {
 	}
 }
 
+// TestIntegrationAppendEventOppKindRejectsReasonCategory proves the
+// opportunity-only path refuses ArchiveReasonCategory — that field is
+// reserved for terminal application events. Caught at the service
+// layer before any DB write.
+func TestIntegrationAppendEventOppKindRejectsReasonCategory(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+	svc := service.New(st, testClock)
+	oppID := seedOpportunity(ctx, t, svc)
+
+	for _, kind := range []string{"note", "follow_up", "exploring", "archived", "declined"} {
+		t.Run(kind, func(t *testing.T) {
+			if _, err := svc.AppendEvent(ctx, service.EventInput{
+				OpportunityID:         oppID,
+				Kind:                  kind,
+				ArchiveReasonCategory: "other",
+			}); !errors.Is(err, service.ErrValidation) {
+				t.Fatalf("kind %q with reason category: want ErrValidation, got %v", kind, err)
+			}
+		})
+	}
+
+	// Nothing landed: still just the `added` event from seedOpportunity.
+	var n int
+	if err := st.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM events WHERE opportunity_id = $1`, oppID).Scan(&n); err != nil {
+		t.Fatalf("count events: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("event count = %d, want 1 (added only)", n)
+	}
+}
+
 func TestIntegrationAppendEventPreconditionShortCircuitsBeforeWrite(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()

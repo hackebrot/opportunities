@@ -34,6 +34,11 @@ func TestApplyAppTransition(t *testing.T) {
 		{"behavioral from applied", "behavioral", "applied", "", "in_progress", false, nil},
 		{"onsite from applied", "onsite", "applied", "", "in_progress", false, nil},
 
+		// Non-terminal kinds reject a supplied reason category — it
+		// belongs only on the terminal kinds that require one.
+		{"screen rejects reason category", "screen", "applied", "compensation", "", false, ErrValidation},
+		{"offer rejects reason category", "offer", "applied", "process_ended", "", false, ErrValidation},
+
 		// offer/counter accept applied/in_progress/offer; flip to offer.
 		{"offer from applied", "offer", "applied", "", "offer", false, nil},
 		{"offer from in_progress", "offer", "in_progress", "", "offer", false, nil},
