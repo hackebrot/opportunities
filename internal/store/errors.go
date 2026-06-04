@@ -13,12 +13,14 @@ var (
 	// unique constraint (e.g. duplicate company slug).
 	ErrConflict = errors.New("store: conflict")
 
-	// ErrActiveExists is returned when an applications insert would
-	// violate the partial unique index uq_active_app_per_opportunity —
-	// the opportunity already has an application in an active status
-	// (applied/in_progress/offer). Distinct from ErrConflict so callers
-	// can present the user-facing "you already have an open application
-	// for this opportunity" message instead of a generic conflict.
+	// ErrActiveExists is returned when an applications insert or update
+	// would violate the partial unique index uq_active_app_per_opportunity
+	// — the opportunity already has an application in an active status
+	// (applied/in_progress/offer). Updates can hit this when
+	// opportunity_id is reassigned to an opportunity that already owns an
+	// active application. Distinct from ErrConflict so callers can
+	// present the user-facing "you already have an open application for
+	// this opportunity" message instead of a generic conflict.
 	ErrActiveExists = errors.New("store: active application already exists")
 )
 
