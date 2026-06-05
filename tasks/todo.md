@@ -86,7 +86,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
       `TestIntegrationInsertEventCrossOpportunityApplication`
       (`internal/store/opportunities_integration_test.go`) with a call to
       the new applications store insert.
-- [ ] **T16** (#16) — Application status transitions: every remaining row of
+- [x] **T16** (#16) — Application status transitions: every remaining row of
       the transition table (interview kinds, offer/counter, accepted,
       rejected/declined/withdrawn with `archive_reason_category`).
       Table-driven tests; `archived_at = events.occurred_at` mirroring.

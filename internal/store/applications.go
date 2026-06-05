@@ -93,10 +93,42 @@ func (s *Store) ListApplications(ctx context.Context) ([]model.Application, erro
 	return out, nil
 }
 
+// SetApplicationStatus writes the status-machine columns of id and bumps
+// updated_at. q may be the pool or a transaction so the write can join
+// an enclosing tx that emits the matching event and recomputes
+// latest_status atomically (see service.AppendEvent). Passing
+// archivedAt = nil leaves the column NULL — used by non-terminal
+// transitions (screen → in_progress, offer); terminal transitions
+// (accepted/rejected/declined/withdrawn) pass the event's occurred_at so
+// the application's archived_at mirrors it.
+//
+// A bad status or archive_reason_category combo trips
+// applications_status_chk or applications_archive_reason_chk and
+// surfaces as ErrConflict; a partial-unique-index violation on a
+// status flip back into the active set surfaces as ErrActiveExists.
+// Missing id is ErrNotFound.
+func (s *Store) SetApplicationStatus(ctx context.Context, q Querier, id, status string, archivedAt *time.Time, archiveReasonCategory *string) error {
+	const query = `
+		UPDATE applications
+		SET status = $2,
+			archived_at = $3,
+			archive_reason_category = $4,
+			updated_at = now()
+		WHERE id = $1`
+	tag, err := q.Exec(ctx, query, id, status, archivedAt, archiveReasonCategory)
+	if err != nil {
+		return translateApplicationErr("set status", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // UpdateApplication overwrites the editable, non-status-machine fields of
 // id and bumps updated_at. Status and the archived_at / archive_reason*
 // columns are deliberately left untouched — those belong to the events
-// engine (T16). Returns the post-update row.
+// engine via SetApplicationStatus. Returns the post-update row.
 func (s *Store) UpdateApplication(ctx context.Context, id string, p ApplicationParams) (model.Application, error) {
 	const q = `
 		UPDATE applications

@@ -174,15 +174,25 @@ func TestIntegrationAppendEventValidation(t *testing.T) {
 		t.Fatalf("missing opportunity: want ErrValidation, got %v", err)
 	}
 
-	// Application-tied kinds are rejected with ErrValidation until the
-	// applications layer wires them in.
+	// `applied` is reserved for AddApplication so the partial-unique-index
+	// guard runs as part of the insert; AppendEvent rejects it as a
+	// validation error regardless of state.
 	oppID := seedOpportunity(ctx, t, svc)
-	for _, kind := range []string{"applied", "screen", "offer", "accepted", "rejected"} {
+	if _, err := svc.AppendEvent(ctx, service.EventInput{
+		OpportunityID: oppID,
+		Kind:          "applied",
+	}); !errors.Is(err, service.ErrValidation) {
+		t.Fatalf("kind \"applied\": want ErrValidation, got %v", err)
+	}
+
+	// The other application-tied kinds are well-formed but require an
+	// active application; without one they fail the precondition.
+	for _, kind := range []string{"screen", "offer", "accepted", "rejected", "withdrawn"} {
 		if _, err := svc.AppendEvent(ctx, service.EventInput{
 			OpportunityID: oppID,
 			Kind:          kind,
-		}); !errors.Is(err, service.ErrValidation) {
-			t.Fatalf("kind %q: want ErrValidation, got %v", kind, err)
+		}); !errors.Is(err, service.ErrPrecondition) {
+			t.Fatalf("kind %q without active app: want ErrPrecondition, got %v", kind, err)
 		}
 	}
 
@@ -192,6 +202,44 @@ func TestIntegrationAppendEventValidation(t *testing.T) {
 		Kind:          "note",
 	}); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("unknown opportunity: want store.ErrNotFound, got %v", err)
+	}
+}
+
+// TestIntegrationAppendEventOppKindRejectsReasonCategory proves the
+// opportunity-only path refuses ArchiveReasonCategory — that field is
+// reserved for terminal application events. Caught at the service
+// layer before any DB write.
+func TestIntegrationAppendEventOppKindRejectsReasonCategory(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+	svc := service.New(st, testClock)
+	oppID := seedOpportunity(ctx, t, svc)
+
+	for _, kind := range []string{"note", "follow_up", "exploring", "archived", "declined"} {
+		t.Run(kind, func(t *testing.T) {
+			if _, err := svc.AppendEvent(ctx, service.EventInput{
+				OpportunityID:         oppID,
+				Kind:                  kind,
+				ArchiveReasonCategory: "other",
+			}); !errors.Is(err, service.ErrValidation) {
+				t.Fatalf("kind %q with reason category: want ErrValidation, got %v", kind, err)
+			}
+		})
+	}
+
+	// Nothing landed: still just the `added` event from seedOpportunity.
+	var n int
+	if err := st.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM events WHERE opportunity_id = $1`, oppID).Scan(&n); err != nil {
+		t.Fatalf("count events: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("event count = %d, want 1 (added only)", n)
 	}
 }
 

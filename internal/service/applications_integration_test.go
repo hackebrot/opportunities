@@ -135,13 +135,15 @@ func TestIntegrationAddApplicationReapply(t *testing.T) {
 		t.Fatalf("first add: %v", err)
 	}
 
-	// Terminate the first app outside the application service surface:
-	// T15 doesn't ship the rejected transition (T16 does). Driving the
-	// store directly is enough to free the partial-index slot.
-	if _, err := st.Pool.Exec(ctx, `
-		UPDATE applications SET status = 'rejected', archive_reason_category = 'process_ended',
-			archived_at = now() WHERE id = $1`, first.ID); err != nil {
-		t.Fatalf("terminate first: %v", err)
+	// Terminate the first app through the events engine: a rejected
+	// event flips the application to a terminal status, freeing the
+	// partial-index slot for the re-application below.
+	if _, err := svc.AppendEvent(ctx, service.EventInput{
+		OpportunityID:         oppID,
+		Kind:                  "rejected",
+		ArchiveReasonCategory: "process_ended",
+	}); err != nil {
+		t.Fatalf("reject first: %v", err)
 	}
 
 	second, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID})

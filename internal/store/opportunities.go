@@ -190,13 +190,16 @@ func (s *Store) SetOpportunityArchived(ctx context.Context, q Querier, id string
 }
 
 // OpportunityStatusInputs is the data the latest_status rule reads:
-// whether the opportunity is archived, the status of its (at most one)
-// active application, the status of its most recently applied
+// whether the opportunity is archived, the id and status of its (at most
+// one) active application, the status of its most recently applied
 // application, whether any application exists, and whether any
 // non-passive event exists. Passive event kinds (added, note, follow_up,
-// custom, archived, reopened) carry no progression signal.
+// custom, archived, reopened) carry no progression signal. ActiveAppID
+// is the empty string when no active application exists; the service
+// uses it to route application-tied event kinds to the right row.
 type OpportunityStatusInputs struct {
 	Archived           bool
+	ActiveAppID        string
 	ActiveAppStatus    string
 	LatestAppStatus    string
 	AnyApp             bool
@@ -217,6 +220,10 @@ func (s *Store) LoadOpportunityStatusInputs(ctx context.Context, q Querier, id s
 	const query = `
 		SELECT
 			(o.archived_at IS NOT NULL) AS archived,
+			(SELECT a.id FROM applications a
+				WHERE a.opportunity_id = o.id
+				  AND a.status IN ('applied','in_progress','offer')
+				LIMIT 1) AS active_app_id,
 			(SELECT a.status FROM applications a
 				WHERE a.opportunity_id = o.id
 				  AND a.status IN ('applied','in_progress','offer')
@@ -234,18 +241,22 @@ func (s *Store) LoadOpportunityStatusInputs(ctx context.Context, q Querier, id s
 		WHERE o.id = $1
 		FOR UPDATE OF o`
 	var (
-		out    OpportunityStatusInputs
-		active *string
-		latest *string
+		out      OpportunityStatusInputs
+		activeID *string
+		active   *string
+		latest   *string
 	)
 	err := q.QueryRow(ctx, query, id).Scan(
-		&out.Archived, &active, &latest, &out.AnyApp, &out.AnyNonPassiveEvent,
+		&out.Archived, &activeID, &active, &latest, &out.AnyApp, &out.AnyNonPassiveEvent,
 	)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return OpportunityStatusInputs{}, ErrNotFound
 	case err != nil:
 		return OpportunityStatusInputs{}, fmt.Errorf("store: load opportunity status inputs: %w", err)
+	}
+	if activeID != nil {
+		out.ActiveAppID = *activeID
 	}
 	if active != nil {
 		out.ActiveAppStatus = *active
