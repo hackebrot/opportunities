@@ -40,6 +40,7 @@ func TestOpportunitySubcommandFlags(t *testing.T) {
 		"opportunity rm":           {newOpportunityRmCmd, []string{"yes"}},
 		"opportunity archive":      {newOpportunityArchiveCmd, []string{"reason", "json"}},
 		"opportunity note":         {newOpportunityNoteCmd, []string{"json"}},
+		"opportunity apply":        {newOpportunityApplyCmd, []string{"applied-at", "applied-with-email", "notes", "json"}},
 		"opportunity event create": {newOpportunityEventCreateCmd, []string{"kind", "label", "notes", "json"}},
 	}
 	for name, tc := range cases {

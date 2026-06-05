@@ -51,6 +51,16 @@ func NewRoot(version string) *cobra.Command {
 	root.AddCommand(newCompanyCmd())
 	root.AddCommand(newContactCmd())
 	root.AddCommand(newOpportunityCmd())
+	root.AddCommand(newApplyAliasCmd())
 
 	return root
+}
+
+// newApplyAliasCmd is the top-level shortcut for `opps opportunity apply`.
+// The grammar reserves `opps apply`, `opps note`, and `opps follow-up` as
+// state-transition shortcuts justified by specific user stories; this
+// builds a separate cobra command instance from the same factory so the
+// flags and RunE stay in lockstep with the canonical subcommand.
+func newApplyAliasCmd() *cobra.Command {
+	return newOpportunityApplyCmd()
 }

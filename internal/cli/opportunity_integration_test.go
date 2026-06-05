@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hackebrot/opportunities/internal/prompt"
+	"github.com/hackebrot/opportunities/internal/store"
 )
 
 // TestIntegrationOpportunityCRUDViaCLI drives every opportunity
@@ -285,6 +286,115 @@ func TestIntegrationOpportunityContactAttachDetachViaCLI(t *testing.T) {
 		"--opportunity", oppID, "--as", "recruiter"); err == nil {
 		t.Fatal("detach already-detached row: expected error")
 	}
+}
+
+// TestIntegrationOpportunityApplyViaCLI proves `opps opportunity apply
+// [<id>]` creates an application against the picked opportunity, flips
+// latest_status, and that a subsequent attempt to apply again fails
+// with ErrActiveExists — the partial unique index sees one slot taken.
+func TestIntegrationOpportunityApplyViaCLI(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+
+	dsn := st.Pool.Config().ConnString()
+	t.Setenv("OPPS_DATABASE_URL", dsn)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	companyOut := runCmd(ctx, t, "--non-interactive", "company", "create",
+		"--name", "Acme Corp", "--json")
+	companyID := decodeCompanyJSON(t, companyOut).ID
+
+	createOut := runCmd(ctx, t, "--non-interactive", "opportunity", "create",
+		"--company", companyID,
+		"--role-title", "Staff Engineer",
+		"--office-days-per-week", "0",
+		"--source", "outbound",
+		"--json")
+	oppID := decodeOpportunityJSON(t, createOut).ID
+
+	applyOut := runCmd(ctx, t, "--non-interactive", "opportunity", "apply", oppID,
+		"--applied-with-email", "me@example.test",
+		"--notes", "applied via careers page",
+		"--json")
+	app := decodeApplicationJSON(t, applyOut)
+	if app.Status != "applied" {
+		t.Fatalf("apply status = %q, want applied", app.Status)
+	}
+	if app.OpportunityID != oppID {
+		t.Fatalf("apply opportunity_id = %q, want %q", app.OpportunityID, oppID)
+	}
+
+	// latest_status flips to applied.
+	showOut := runCmd(ctx, t, "opportunity", "show", oppID, "--json")
+	if got := decodeOpportunityJSON(t, showOut).LatestStatus; got != "applied" {
+		t.Fatalf("latest_status after apply = %q, want applied", got)
+	}
+
+	// A second apply is rejected by the partial unique index. Pin the
+	// concrete error so a future regression that swallows it into a
+	// generic "internal error" still fails here.
+	if _, err := tryRun(ctx, t, "--non-interactive", "opportunity", "apply", oppID); !errors.Is(err, store.ErrActiveExists) {
+		t.Fatalf("second apply: err=%v, want store.ErrActiveExists", err)
+	}
+}
+
+// TestIntegrationApplyAliasViaCLI proves the top-level `opps apply
+// <id>` shortcut reaches the same RunE as the canonical noun-first
+// `opps opportunity apply <id>` — a thin wiring check that catches a
+// missing AddCommand or a divergent factory.
+func TestIntegrationApplyAliasViaCLI(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+
+	dsn := st.Pool.Config().ConnString()
+	t.Setenv("OPPS_DATABASE_URL", dsn)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	companyOut := runCmd(ctx, t, "--non-interactive", "company", "create",
+		"--name", "Acme Corp", "--json")
+	companyID := decodeCompanyJSON(t, companyOut).ID
+
+	createOut := runCmd(ctx, t, "--non-interactive", "opportunity", "create",
+		"--company", companyID,
+		"--source", "outbound",
+		"--office-days-per-week", "0",
+		"--json")
+	oppID := decodeOpportunityJSON(t, createOut).ID
+
+	aliasOut := runCmd(ctx, t, "--non-interactive", "apply", oppID, "--json")
+	app := decodeApplicationJSON(t, aliasOut)
+	if app.Status != "applied" {
+		t.Fatalf("alias apply status = %q, want applied", app.Status)
+	}
+	if app.OpportunityID != oppID {
+		t.Fatalf("alias apply opp = %q, want %q", app.OpportunityID, oppID)
+	}
+}
+
+type applicationJSONShape struct {
+	ID                    string  `json:"id"`
+	OpportunityID         string  `json:"opportunity_id"`
+	Status                string  `json:"status"`
+	ArchiveReasonCategory *string `json:"archive_reason_category"`
+}
+
+func decodeApplicationJSON(t *testing.T, s string) applicationJSONShape {
+	t.Helper()
+	var a applicationJSONShape
+	if err := json.Unmarshal([]byte(s), &a); err != nil {
+		t.Fatalf("decode application JSON: %v\n%s", err, s)
+	}
+	return a
 }
 
 type opportunityJSONShape struct {

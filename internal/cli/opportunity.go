@@ -58,9 +58,59 @@ func newOpportunityCmd() *cobra.Command {
 		newOpportunityRmCmd(),
 		newOpportunityArchiveCmd(),
 		newOpportunityNoteCmd(),
+		newOpportunityApplyCmd(),
 		newOpportunityEventCmd(),
 		newOpportunityContactCmd(),
 	)
+	return cmd
+}
+
+// newOpportunityApplyCmd implements the `opps opportunity apply [<id>]`
+// shortcut: capture an `applied` event against an existing opportunity,
+// creating the application row in the same tx via service.AddApplication.
+// Top-level `opps apply` registers a second instance as an alias.
+func newOpportunityApplyCmd() *cobra.Command {
+	var appliedAt string
+	var appliedWithEmail string
+	var notes string
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "apply [<id>]",
+		Short: "Mark an opportunity as applied (creates an application)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, closeFn, err := openServiceFromConfig(cmd)
+			if err != nil {
+				return err
+			}
+			defer closeFn()
+			opp, err := resolveOpportunity(cmd.Context(), svc, args)
+			if err != nil {
+				return err
+			}
+			in := service.ApplicationInput{
+				OpportunityID:    opp.ID,
+				AppliedWithEmail: appliedWithEmail,
+				Notes:            notes,
+			}
+			if appliedAt != "" {
+				t, err := time.Parse(time.RFC3339, appliedAt)
+				if err != nil {
+					return fmt.Errorf("--applied-at: %w", err)
+				}
+				in.AppliedAt = &t
+			}
+			app, err := svc.AddApplication(cmd.Context(), in)
+			if err != nil {
+				return err
+			}
+			return printApplication(cmd.OutOrStdout(), app, asJSON)
+		},
+	}
+	cmd.Flags().StringVar(&appliedAt, "applied-at", "", "Submission time as RFC3339 (optional)")
+	cmd.Flags().StringVar(&appliedWithEmail, "applied-with-email", "", "Email used on the application (optional override)")
+	cmd.Flags().StringVar(&notes, "notes", "", "Free-form notes")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit the created application as JSON")
 	return cmd
 }
 
@@ -595,6 +645,89 @@ func toEventJSON(e model.Event) eventJSON {
 		Notes:         e.Notes,
 		CreatedAt:     e.CreatedAt.UTC().Format(time.RFC3339),
 	}
+}
+
+// applicationJSON shapes the on-the-wire application payload.
+type applicationJSON struct {
+	ID                    string  `json:"id"`
+	OpportunityID         string  `json:"opportunity_id"`
+	AppliedAt             *string `json:"applied_at,omitempty"`
+	AppliedWithEmail      string  `json:"applied_with_email,omitempty"`
+	Status                string  `json:"status"`
+	ArchivedAt            *string `json:"archived_at,omitempty"`
+	ArchiveReasonCategory *string `json:"archive_reason_category,omitempty"`
+	ArchiveReason         *string `json:"archive_reason,omitempty"`
+	FollowUpBlocked       bool    `json:"follow_up_blocked"`
+	LastFollowedUpAt      *string `json:"last_followed_up_at,omitempty"`
+	Notes                 string  `json:"notes,omitempty"`
+	CreatedAt             string  `json:"created_at"`
+	UpdatedAt             string  `json:"updated_at"`
+}
+
+func toApplicationJSON(a model.Application) applicationJSON {
+	out := applicationJSON{
+		ID:                    a.ID,
+		OpportunityID:         a.OpportunityID,
+		AppliedWithEmail:      a.AppliedWithEmail,
+		Status:                a.Status,
+		ArchiveReasonCategory: a.ArchiveReasonCategory,
+		ArchiveReason:         a.ArchiveReason,
+		FollowUpBlocked:       a.FollowUpBlocked,
+		Notes:                 a.Notes,
+		CreatedAt:             a.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:             a.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+	if a.AppliedAt != nil {
+		s := a.AppliedAt.UTC().Format(time.RFC3339)
+		out.AppliedAt = &s
+	}
+	if a.ArchivedAt != nil {
+		s := a.ArchivedAt.UTC().Format(time.RFC3339)
+		out.ArchivedAt = &s
+	}
+	if a.LastFollowedUpAt != nil {
+		s := a.LastFollowedUpAt.UTC().Format(time.RFC3339)
+		out.LastFollowedUpAt = &s
+	}
+	return out
+}
+
+func printApplication(w io.Writer, a model.Application, asJSON bool) error {
+	if asJSON {
+		return writeJSON(w, toApplicationJSON(a))
+	}
+	appliedAt := ""
+	if a.AppliedAt != nil {
+		appliedAt = a.AppliedAt.UTC().Format(time.RFC3339)
+	}
+	archivedAt := ""
+	if a.ArchivedAt != nil {
+		archivedAt = a.ArchivedAt.UTC().Format(time.RFC3339)
+	}
+	reasonCategory := ""
+	if a.ArchiveReasonCategory != nil {
+		reasonCategory = *a.ArchiveReasonCategory
+	}
+	rows := [][2]string{
+		{"ID", a.ID},
+		{"Opportunity", a.OpportunityID},
+		{"Status", a.Status},
+		{"Applied at", appliedAt},
+		{"Applied with email", oneline(a.AppliedWithEmail)},
+		{"Archived at", archivedAt},
+		{"Archive reason category", oneline(reasonCategory)},
+		{"Follow-up blocked", fmt.Sprintf("%t", a.FollowUpBlocked)},
+		{"Notes", oneline(a.Notes)},
+		{"Created", a.CreatedAt.UTC().Format(time.RFC3339)},
+		{"Updated", a.UpdatedAt.UTC().Format(time.RFC3339)},
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	for _, r := range rows {
+		if _, err := fmt.Fprintf(tw, "%s\t%s\n", r[0], r[1]); err != nil {
+			return err
+		}
+	}
+	return tw.Flush()
 }
 
 func printEvent(w io.Writer, e model.Event, asJSON bool) error {
