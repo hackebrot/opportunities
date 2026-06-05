@@ -45,24 +45,6 @@ var opportunityOnlyEventKinds = map[string]bool{
 	"declined":  true,
 }
 
-// applicationEventKinds is the set of event kinds whose semantics
-// require an existing application. AppendEvent routes them through the
-// application-transition path. "declined" lives in
-// applicationTransitions too but only routes here when an application
-// already exists.
-var applicationEventKinds = map[string]bool{
-	"screen":        true,
-	"technical":     true,
-	"system_design": true,
-	"behavioral":    true,
-	"onsite":        true,
-	"offer":         true,
-	"counter":       true,
-	"accepted":      true,
-	"rejected":      true,
-	"withdrawn":     true,
-}
-
 // appTransition describes how an application-tied event mutates the
 // application row. from is the set of application statuses the kind
 // accepts (the active app's status must be in it); to is the status to
@@ -142,14 +124,19 @@ const (
 )
 
 // routeEvent picks the path AppendEvent takes. Most kinds are statically
-// routed; "declined" is dual — without an application it stays on the
+// routed by membership in applicationTransitions vs.
+// opportunityOnlyEventKinds; "declined" is dual — it lives in both maps,
+// so it is checked first: without an application it stays on the
 // opportunity-only path (which archives the opportunity), with one it
 // flips through the application transition.
 func routeEvent(kind string, state store.OpportunityStatusInputs) (eventRoute, error) {
-	if applicationEventKinds[kind] {
-		return routeApplication, nil
+	if kind == "declined" {
+		if state.AnyApp {
+			return routeApplication, nil
+		}
+		return routeOpportunity, nil
 	}
-	if kind == "declined" && state.AnyApp {
+	if _, ok := applicationTransitions[kind]; ok {
 		return routeApplication, nil
 	}
 	if opportunityOnlyEventKinds[kind] {
