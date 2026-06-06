@@ -432,7 +432,7 @@ func newOpportunityEventCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&kind, "kind", "", "Event kind; if omitted, a contextual menu is shown")
 	cmd.Flags().StringVar(&label, "label", "", "Required free-form label when --kind=custom")
 	cmd.Flags().StringVar(&notes, "notes", "", "Free-form notes")
-	cmd.Flags().StringVar(&reasonCategory, "archive-reason-category", "", "Required category for terminal app events (rejected, declined, withdrawn)")
+	cmd.Flags().StringVar(&reasonCategory, "archive-reason-category", "", "Required category when rejected/declined/withdrawn terminates an active application; rejected by the service for declined-without-app")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit JSON instead of a table")
 	return cmd
 }
@@ -445,9 +445,12 @@ type eventKindOption struct {
 	Label string
 }
 
-// availableEventKinds returns the kinds whose preconditions are
-// satisfied for an opportunity whose latest_status is the given value.
-// Order matches the order presented in the picker.
+// availableEventKinds returns the curated picker menu for an
+// opportunity whose latest_status is the given value. The list is a
+// subset of the kinds the service transition table accepts: some
+// valid-but-unusual transitions (e.g. offer→offer) are intentionally
+// omitted from the menu, but remain reachable by passing --kind
+// explicitly. Order matches the order presented in the picker.
 //
 // latest_status mirrors the active application's status when one
 // exists, so it is sufficient to decide which kinds to surface without
