@@ -409,7 +409,7 @@ func newOpportunityEventCreateCmd() *cobra.Command {
 				}
 				kind = k
 			}
-			if archiveReasonOptionsForKind(kind) != nil && reasonCategory == "" && hasActiveApp(opp.LatestStatus) {
+			if archiveReasonOptionsForKind(kind) != nil && reasonCategory == "" && service.IsActiveAppStatus(opp.LatestStatus) {
 				cat, err := pickArchiveReasonCategory(cmd.Context(), kind)
 				if err != nil {
 					return err
@@ -533,17 +533,6 @@ func archiveReasonOptionsForKind(kind string) []prompt.Option {
 	default:
 		return nil
 	}
-}
-
-// hasActiveApp reports whether latest_status reflects an active
-// application (applied/in_progress/offer). declined without an active
-// app routes to the opportunity-only path and does not take a category.
-func hasActiveApp(latestStatus string) bool {
-	switch latestStatus {
-	case "applied", "in_progress", "offer":
-		return true
-	}
-	return false
 }
 
 func pickEventKind(ctx context.Context, latestStatus string) (string, error) {
