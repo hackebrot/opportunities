@@ -58,9 +58,59 @@ func newOpportunityCmd() *cobra.Command {
 		newOpportunityRmCmd(),
 		newOpportunityArchiveCmd(),
 		newOpportunityNoteCmd(),
+		newOpportunityApplyCmd(),
 		newOpportunityEventCmd(),
 		newOpportunityContactCmd(),
 	)
+	return cmd
+}
+
+// newOpportunityApplyCmd implements the `opps opportunity apply [<id>]`
+// shortcut: capture an `applied` event against an existing opportunity,
+// creating the application row in the same tx via service.AddApplication.
+// Top-level `opps apply` registers a second instance as an alias.
+func newOpportunityApplyCmd() *cobra.Command {
+	var appliedAt string
+	var appliedWithEmail string
+	var notes string
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "apply [<id>]",
+		Short: "Mark an opportunity as applied (creates an application)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, closeFn, err := openServiceFromConfig(cmd)
+			if err != nil {
+				return err
+			}
+			defer closeFn()
+			opp, err := resolveOpportunity(cmd.Context(), svc, args)
+			if err != nil {
+				return err
+			}
+			in := service.ApplicationInput{
+				OpportunityID:    opp.ID,
+				AppliedWithEmail: appliedWithEmail,
+				Notes:            notes,
+			}
+			if appliedAt != "" {
+				t, err := time.Parse(time.RFC3339, appliedAt)
+				if err != nil {
+					return fmt.Errorf("--applied-at: %w", err)
+				}
+				in.AppliedAt = &t
+			}
+			app, err := svc.AddApplication(cmd.Context(), in)
+			if err != nil {
+				return err
+			}
+			return printApplication(cmd.OutOrStdout(), app, asJSON)
+		},
+	}
+	cmd.Flags().StringVar(&appliedAt, "applied-at", "", "Submission time as RFC3339 (optional)")
+	cmd.Flags().StringVar(&appliedWithEmail, "applied-with-email", "", "Email used on the application (optional override)")
+	cmd.Flags().StringVar(&notes, "notes", "", "Free-form notes")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit the created application as JSON")
 	return cmd
 }
 
@@ -336,10 +386,11 @@ func newOpportunityEventCreateCmd() *cobra.Command {
 	var kind string
 	var label string
 	var notes string
+	var reasonCategory string
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "create [<id>]",
-		Short: "Append a timeline event (kinds: exploring, archived, note, follow_up, custom, declined)",
+		Short: "Append a timeline event (contextual kind menu when --kind is omitted)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			svc, closeFn, err := openServiceFromConfig(cmd)
@@ -352,13 +403,25 @@ func newOpportunityEventCreateCmd() *cobra.Command {
 				return err
 			}
 			if kind == "" {
-				return errors.New("--kind is required")
+				k, err := pickEventKind(cmd.Context(), opp.LatestStatus)
+				if err != nil {
+					return err
+				}
+				kind = k
+			}
+			if archiveReasonOptionsForKind(kind) != nil && reasonCategory == "" && service.IsActiveAppStatus(opp.LatestStatus) {
+				cat, err := pickArchiveReasonCategory(cmd.Context(), kind)
+				if err != nil {
+					return err
+				}
+				reasonCategory = cat
 			}
 			ev, err := svc.AppendEvent(cmd.Context(), service.EventInput{
-				OpportunityID: opp.ID,
-				Kind:          kind,
-				Label:         label,
-				Notes:         notes,
+				OpportunityID:         opp.ID,
+				Kind:                  kind,
+				Label:                 label,
+				Notes:                 notes,
+				ArchiveReasonCategory: reasonCategory,
 			})
 			if err != nil {
 				return err
@@ -366,11 +429,140 @@ func newOpportunityEventCreateCmd() *cobra.Command {
 			return printEvent(cmd.OutOrStdout(), ev, asJSON)
 		},
 	}
-	cmd.Flags().StringVar(&kind, "kind", "", "Event kind (exploring, archived, note, follow_up, custom, declined)")
+	cmd.Flags().StringVar(&kind, "kind", "", "Event kind; if omitted, a contextual menu is shown")
 	cmd.Flags().StringVar(&label, "label", "", "Required free-form label when --kind=custom")
 	cmd.Flags().StringVar(&notes, "notes", "", "Free-form notes")
+	cmd.Flags().StringVar(&reasonCategory, "archive-reason-category", "", "Required category when rejected/declined/withdrawn terminates an active application; rejected by the service for declined-without-app")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit JSON instead of a table")
 	return cmd
+}
+
+// eventKindOption is the kind/label pair shown in the contextual menu.
+// Kind is the spec-defined enum string passed to service.AppendEvent;
+// Label is the human-readable choice rendered in the picker.
+type eventKindOption struct {
+	Kind  string
+	Label string
+}
+
+// availableEventKinds returns the curated picker menu for an
+// opportunity whose latest_status is the given value. The list is a
+// subset of the kinds the service transition table accepts: some
+// valid-but-unusual transitions (e.g. offer→offer) are intentionally
+// omitted from the menu, but remain reachable by passing --kind
+// explicitly. Order matches the order presented in the picker.
+//
+// latest_status mirrors the active application's status when one
+// exists, so it is sufficient to decide which kinds to surface without
+// loading the application row.
+func availableEventKinds(latestStatus string) []eventKindOption {
+	if latestStatus == "archived" {
+		return []eventKindOption{
+			{Kind: "note", Label: "Note"},
+			{Kind: "follow_up", Label: "Follow-up"},
+			{Kind: "custom", Label: "Custom"},
+		}
+	}
+	var opts []eventKindOption
+	switch latestStatus {
+	case "applied", "in_progress":
+		opts = append(
+			opts,
+			eventKindOption{Kind: "screen", Label: "Screen"},
+			eventKindOption{Kind: "technical", Label: "Technical interview"},
+			eventKindOption{Kind: "system_design", Label: "System design"},
+			eventKindOption{Kind: "behavioral", Label: "Behavioral"},
+			eventKindOption{Kind: "onsite", Label: "Onsite"},
+			eventKindOption{Kind: "offer", Label: "Offer"},
+			eventKindOption{Kind: "counter", Label: "Counter offer"},
+			eventKindOption{Kind: "rejected", Label: "Rejected"},
+			eventKindOption{Kind: "declined", Label: "Declined"},
+			eventKindOption{Kind: "withdrawn", Label: "Withdrawn"},
+		)
+	case "offer":
+		opts = append(
+			opts,
+			eventKindOption{Kind: "counter", Label: "Counter offer"},
+			eventKindOption{Kind: "accepted", Label: "Accepted"},
+			eventKindOption{Kind: "rejected", Label: "Rejected"},
+			eventKindOption{Kind: "declined", Label: "Declined"},
+			eventKindOption{Kind: "withdrawn", Label: "Withdrawn"},
+		)
+	case "watching", "exploring":
+		opts = append(
+			opts,
+			eventKindOption{Kind: "exploring", Label: "Exploring"},
+			eventKindOption{Kind: "declined", Label: "Declined"},
+		)
+	}
+	return append(
+		opts,
+		eventKindOption{Kind: "note", Label: "Note"},
+		eventKindOption{Kind: "follow_up", Label: "Follow-up"},
+		eventKindOption{Kind: "custom", Label: "Custom"},
+		eventKindOption{Kind: "archived", Label: "Archived"},
+	)
+}
+
+// rejectedReasonOptions mirrors service.rejectedReasonCategories, in
+// display order. The list is duplicated here on purpose: the service
+// owns validation; the CLI owns the UX ordering, and the two layers do
+// not need to share a slice.
+var rejectedReasonOptions = []prompt.Option{
+	{Key: "fit_mismatch", Label: "Fit mismatch"},
+	{Key: "team_preference", Label: "Team preference"},
+	{Key: "role_change", Label: "Role change"},
+	{Key: "process_ended", Label: "Process ended"},
+	{Key: "other", Label: "Other"},
+}
+
+// declineReasonOptions mirrors service.declineReasonCategories.
+var declineReasonOptions = []prompt.Option{
+	{Key: "compensation", Label: "Compensation"},
+	{Key: "scope", Label: "Scope"},
+	{Key: "team_fit", Label: "Team fit"},
+	{Key: "timing", Label: "Timing"},
+	{Key: "other", Label: "Other"},
+}
+
+// archiveReasonOptionsForKind returns the picker options for kinds that
+// take an archive_reason_category, or nil for kinds that don't.
+func archiveReasonOptionsForKind(kind string) []prompt.Option {
+	switch kind {
+	case "rejected":
+		return rejectedReasonOptions
+	case "declined", "withdrawn":
+		return declineReasonOptions
+	default:
+		return nil
+	}
+}
+
+func pickEventKind(ctx context.Context, latestStatus string) (string, error) {
+	eventKinds := availableEventKinds(latestStatus)
+	if len(eventKinds) == 0 {
+		return "", errors.New("no event kinds available for this opportunity")
+	}
+	if prompt.IsNonInteractive(ctx) {
+		return "", fmt.Errorf("%w: --kind is required", prompt.ErrNonInteractive)
+	}
+	promptOpts := make([]prompt.Option, len(eventKinds))
+	for i, k := range eventKinds {
+		promptOpts[i] = prompt.Option{Key: k.Kind, Label: k.Label}
+	}
+	return prompt.InterfaceFrom(ctx).Select("Event kind", promptOpts)
+}
+
+// pickArchiveReasonCategory prompts for the archive_reason_category
+// required on terminal application events. The caller is expected to
+// gate on archiveReasonOptionsForKind(kind) != nil before invoking;
+// passing a kind that doesn't take a category will surface as an empty
+// picker.
+func pickArchiveReasonCategory(ctx context.Context, kind string) (string, error) {
+	if prompt.IsNonInteractive(ctx) {
+		return "", fmt.Errorf("%w: --archive-reason-category is required for %s", prompt.ErrNonInteractive, kind)
+	}
+	return prompt.InterfaceFrom(ctx).Select("Archive reason category", archiveReasonOptionsForKind(kind))
 }
 
 // splitNoteArgs disambiguates `opps opportunity note <id> <text>` from
@@ -595,6 +787,92 @@ func toEventJSON(e model.Event) eventJSON {
 		Notes:         e.Notes,
 		CreatedAt:     e.CreatedAt.UTC().Format(time.RFC3339),
 	}
+}
+
+// applicationJSON shapes the on-the-wire application payload. Time
+// fields are serialized as RFC3339-UTC strings so JSON consumers get a
+// stable format instead of Go's default time.Time encoding (nanoseconds
+// and embedded zone offsets).
+type applicationJSON struct {
+	ID                    string  `json:"id"`
+	OpportunityID         string  `json:"opportunity_id"`
+	AppliedAt             *string `json:"applied_at,omitempty"`
+	AppliedWithEmail      string  `json:"applied_with_email,omitempty"`
+	Status                string  `json:"status"`
+	ArchivedAt            *string `json:"archived_at,omitempty"`
+	ArchiveReasonCategory *string `json:"archive_reason_category,omitempty"`
+	ArchiveReason         *string `json:"archive_reason,omitempty"`
+	FollowUpBlocked       bool    `json:"follow_up_blocked"`
+	LastFollowedUpAt      *string `json:"last_followed_up_at,omitempty"`
+	Notes                 string  `json:"notes,omitempty"`
+	CreatedAt             string  `json:"created_at"`
+	UpdatedAt             string  `json:"updated_at"`
+}
+
+func toApplicationJSON(a model.Application) applicationJSON {
+	out := applicationJSON{
+		ID:                    a.ID,
+		OpportunityID:         a.OpportunityID,
+		AppliedWithEmail:      a.AppliedWithEmail,
+		Status:                a.Status,
+		ArchiveReasonCategory: a.ArchiveReasonCategory,
+		ArchiveReason:         a.ArchiveReason,
+		FollowUpBlocked:       a.FollowUpBlocked,
+		Notes:                 a.Notes,
+		CreatedAt:             a.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:             a.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+	if a.AppliedAt != nil {
+		s := a.AppliedAt.UTC().Format(time.RFC3339)
+		out.AppliedAt = &s
+	}
+	if a.ArchivedAt != nil {
+		s := a.ArchivedAt.UTC().Format(time.RFC3339)
+		out.ArchivedAt = &s
+	}
+	if a.LastFollowedUpAt != nil {
+		s := a.LastFollowedUpAt.UTC().Format(time.RFC3339)
+		out.LastFollowedUpAt = &s
+	}
+	return out
+}
+
+func printApplication(w io.Writer, a model.Application, asJSON bool) error {
+	if asJSON {
+		return writeJSON(w, toApplicationJSON(a))
+	}
+	appliedAt := ""
+	if a.AppliedAt != nil {
+		appliedAt = a.AppliedAt.UTC().Format(time.RFC3339)
+	}
+	archivedAt := ""
+	if a.ArchivedAt != nil {
+		archivedAt = a.ArchivedAt.UTC().Format(time.RFC3339)
+	}
+	reasonCategory := ""
+	if a.ArchiveReasonCategory != nil {
+		reasonCategory = *a.ArchiveReasonCategory
+	}
+	rows := [][2]string{
+		{"ID", a.ID},
+		{"Opportunity", a.OpportunityID},
+		{"Status", a.Status},
+		{"Applied at", appliedAt},
+		{"Applied with email", oneline(a.AppliedWithEmail)},
+		{"Archived at", archivedAt},
+		{"Archive reason category", oneline(reasonCategory)},
+		{"Follow-up blocked", fmt.Sprintf("%t", a.FollowUpBlocked)},
+		{"Notes", oneline(a.Notes)},
+		{"Created", a.CreatedAt.UTC().Format(time.RFC3339)},
+		{"Updated", a.UpdatedAt.UTC().Format(time.RFC3339)},
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	for _, r := range rows {
+		if _, err := fmt.Fprintf(tw, "%s\t%s\n", r[0], r[1]); err != nil {
+			return err
+		}
+	}
+	return tw.Flush()
 }
 
 func printEvent(w io.Writer, e model.Event, asJSON bool) error {

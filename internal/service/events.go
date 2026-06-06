@@ -73,6 +73,14 @@ var fromActiveStatuses = map[string]bool{
 	"offer":       true,
 }
 
+// IsActiveAppStatus reports whether the given latest_status reflects an
+// active application. Exported so callers (e.g. the CLI's contextual
+// kind picker) can gate prompts on the same set the transition table
+// validates against, without duplicating it.
+func IsActiveAppStatus(latestStatus string) bool {
+	return fromActiveStatuses[latestStatus]
+}
+
 // fromOfferOnly is the precondition for accepted: an offer must be on
 // the table before it can be accepted.
 var fromOfferOnly = map[string]bool{"offer": true}
