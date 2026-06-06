@@ -381,6 +381,104 @@ func TestIntegrationApplyAliasViaCLI(t *testing.T) {
 	}
 }
 
+// TestIntegrationOpportunityEventCreateRejectViaCLI proves that moving
+// an active application to rejected via `opps opportunity event create`
+// — with the archive_reason_category supplied as a flag — archives the
+// application row and flips latest_status to dormant (any-app, none
+// active).
+func TestIntegrationOpportunityEventCreateRejectViaCLI(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+
+	dsn := st.Pool.Config().ConnString()
+	t.Setenv("OPPS_DATABASE_URL", dsn)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	companyOut := runCmd(ctx, t, "--non-interactive", "company", "create",
+		"--name", "Acme Corp", "--json")
+	companyID := decodeCompanyJSON(t, companyOut).ID
+
+	createOut := runCmd(ctx, t, "--non-interactive", "opportunity", "create",
+		"--company", companyID,
+		"--role-title", "Staff Engineer",
+		"--office-days-per-week", "0",
+		"--source", "outbound",
+		"--json")
+	oppID := decodeOpportunityJSON(t, createOut).ID
+
+	if _, err := tryRun(ctx, t, "--non-interactive", "opportunity", "apply", oppID); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	// Reject without the category must fail before SQL.
+	if _, err := tryRun(ctx, t, "--non-interactive",
+		"opportunity", "event", "create", oppID,
+		"--kind", "rejected"); err == nil {
+		t.Fatal("rejected without --archive-reason-category: expected error")
+	}
+
+	// Reject with category lands and archives the app.
+	eventOut := runCmd(ctx, t, "--non-interactive",
+		"opportunity", "event", "create", oppID,
+		"--kind", "rejected",
+		"--archive-reason-category", "process_ended",
+		"--json")
+	var ev struct {
+		Kind          string  `json:"kind"`
+		ApplicationID *string `json:"application_id"`
+	}
+	if err := json.Unmarshal([]byte(eventOut), &ev); err != nil {
+		t.Fatalf("event unmarshal: %v\n%s", err, eventOut)
+	}
+	if ev.Kind != "rejected" {
+		t.Fatalf("event kind = %q, want rejected", ev.Kind)
+	}
+	if ev.ApplicationID == nil || *ev.ApplicationID == "" {
+		t.Fatalf("event application_id missing: %s", eventOut)
+	}
+
+	// Application row is archived with the supplied category.
+	var (
+		status         string
+		archivedAt     *time.Time
+		reasonCategory *string
+	)
+	if err := st.Pool.QueryRow(
+		ctx, `
+		SELECT status, archived_at, archive_reason_category
+		FROM applications
+		WHERE opportunity_id = $1`, oppID,
+	).Scan(&status, &archivedAt, &reasonCategory); err != nil {
+		t.Fatalf("query application: %v", err)
+	}
+	if status != "rejected" {
+		t.Fatalf("application status = %q, want rejected", status)
+	}
+	if archivedAt == nil {
+		t.Fatal("application archived_at = nil, want non-nil")
+	}
+	if reasonCategory == nil || *reasonCategory != "process_ended" {
+		t.Fatalf("archive_reason_category = %v, want process_ended", reasonCategory)
+	}
+
+	// latest_status flips to dormant: any app exists, none active.
+	showOut := runCmd(ctx, t, "opportunity", "show", oppID, "--json")
+	if got := decodeOpportunityJSON(t, showOut).LatestStatus; got != "dormant" {
+		t.Fatalf("latest_status after rejected = %q, want dormant", got)
+	}
+
+	// --kind omitted in non-interactive mode now surfaces ErrNonInteractive.
+	if _, err := tryRun(ctx, t, "--non-interactive",
+		"opportunity", "event", "create", oppID); !errors.Is(err, prompt.ErrNonInteractive) {
+		t.Fatalf("event create without --kind: err=%v, want ErrNonInteractive", err)
+	}
+}
+
 type applicationJSONShape struct {
 	ID                    string  `json:"id"`
 	OpportunityID         string  `json:"opportunity_id"`

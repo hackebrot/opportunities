@@ -41,7 +41,7 @@ func TestOpportunitySubcommandFlags(t *testing.T) {
 		"opportunity archive":      {newOpportunityArchiveCmd, []string{"reason", "json"}},
 		"opportunity note":         {newOpportunityNoteCmd, []string{"json"}},
 		"opportunity apply":        {newOpportunityApplyCmd, []string{"applied-at", "applied-with-email", "notes", "json"}},
-		"opportunity event create": {newOpportunityEventCreateCmd, []string{"kind", "label", "notes", "json"}},
+		"opportunity event create": {newOpportunityEventCreateCmd, []string{"kind", "label", "notes", "archive-reason-category", "json"}},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -164,6 +164,65 @@ func TestOpportunityPickLabel(t *testing.T) {
 		CompanyName: "Acme", LatestStatus: "watching",
 	}); got != "Acme — (no role) [watching]" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// TestAvailableEventKinds pins the contextual menu shown for each
+// latest_status. If the state machine changes, the affected statuses
+// fail here instead of at the user.
+func TestAvailableEventKinds(t *testing.T) {
+	t.Parallel()
+
+	// Two statuses share the same active-application menu; name it once
+	// so the duplication is explicit.
+	activeAppKinds := []string{
+		"screen", "technical", "system_design", "behavioral", "onsite",
+		"offer", "counter",
+		"rejected", "declined", "withdrawn",
+		"note", "follow_up", "custom", "archived",
+	}
+
+	byStatus := map[string][]string{
+		"watching":    {"exploring", "declined", "note", "follow_up", "custom", "archived"},
+		"exploring":   {"exploring", "declined", "note", "follow_up", "custom", "archived"},
+		"applied":     activeAppKinds,
+		"in_progress": activeAppKinds,
+		"offer":       {"counter", "accepted", "rejected", "declined", "withdrawn", "note", "follow_up", "custom", "archived"},
+		"dormant":     {"note", "follow_up", "custom", "archived"},
+		"accepted":    {"note", "follow_up", "custom", "archived"},
+		"archived":    {"note", "follow_up", "custom"},
+	}
+
+	for status, want := range byStatus {
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			var got []string
+			for _, opt := range availableEventKinds(status) {
+				got = append(got, opt.Kind)
+			}
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Errorf("availableEventKinds(%q) (-want +got):\n%s", status, diff)
+			}
+		})
+	}
+}
+
+func TestArchiveReasonOptionsForKind(t *testing.T) {
+	t.Parallel()
+	rejected := archiveReasonOptionsForKind("rejected")
+	if len(rejected) == 0 || rejected[0].Key != "fit_mismatch" {
+		t.Errorf("rejected reasons: got %+v", rejected)
+	}
+	declined := archiveReasonOptionsForKind("declined")
+	if len(declined) == 0 || declined[0].Key != "compensation" {
+		t.Errorf("declined reasons: got %+v", declined)
+	}
+	withdrawn := archiveReasonOptionsForKind("withdrawn")
+	if !cmp.Equal(declined, withdrawn) {
+		t.Errorf("withdrawn != declined reasons:\n%s", cmp.Diff(declined, withdrawn))
+	}
+	if got := archiveReasonOptionsForKind("note"); got != nil {
+		t.Errorf("note reasons = %+v, want nil", got)
 	}
 }
 
