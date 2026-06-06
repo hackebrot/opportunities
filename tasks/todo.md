@@ -94,7 +94,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
       `TestIntegrationAddApplicationReapply`
       (`internal/service/applications_integration_test.go`) with a call
       through the new rejected/declined/withdrawn service surface.
-- [ ] **T17** (#17) — `opps opportunity apply` + `opps opportunity event
+- [x] **T17** (#17) — `opps opportunity apply` + `opps opportunity event
       create` app-scoped contextual menu. Top-level `opps apply`
       registered as alias.
 - [ ] **T18** (#18) — `opps application follow-up [<id>] [--blocked] [--done]`
