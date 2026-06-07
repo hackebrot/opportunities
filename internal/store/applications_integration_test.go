@@ -163,6 +163,92 @@ func TestIntegrationApplicationsActiveSlot(t *testing.T) {
 	}
 }
 
+// TestIntegrationSetApplicationFollowUp proves the follow-up writer
+// honors nil-as-"leave alone" semantics for both columns and bumps
+// updated_at. Three calls exercise the three combinations the service
+// layer drives: stamp-only, block-only, and the done combo.
+func TestIntegrationSetApplicationFollowUp(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	store := startPostgresStore(ctx, t)
+	if err := store.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+
+	oppID := seedOpportunity(ctx, t, store, "Acme Corp", "acmecorp")
+	app, err := store.InsertApplication(ctx, store.Pool,
+		ApplicationParams{OpportunityID: oppID}, "applied")
+	if err != nil {
+		t.Fatalf("insert application: %v", err)
+	}
+	if app.FollowUpBlocked {
+		t.Fatalf("fresh application FollowUpBlocked = true, want false")
+	}
+	if app.LastFollowedUpAt != nil {
+		t.Fatalf("fresh application LastFollowedUpAt = %v, want nil", app.LastFollowedUpAt)
+	}
+
+	// Stamp-only: writes last_followed_up_at, leaves block at false.
+	// Also asserts the RETURNING row matches a subsequent GetApplication
+	// — once is enough; the other cases below just check the persisted
+	// state via the returned row directly.
+	stamp := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
+	got, err := store.SetApplicationFollowUp(ctx, store.Pool, app.ID, &stamp, nil)
+	if err != nil {
+		t.Fatalf("set stamp-only: %v", err)
+	}
+	if got.LastFollowedUpAt == nil || !got.LastFollowedUpAt.Equal(stamp) {
+		t.Fatalf("LastFollowedUpAt after stamp = %v, want %v", got.LastFollowedUpAt, stamp)
+	}
+	if got.FollowUpBlocked {
+		t.Fatalf("FollowUpBlocked after stamp = true, want false (stamp leaves block alone)")
+	}
+	if !got.UpdatedAt.After(app.UpdatedAt) {
+		t.Fatalf("updated_at not bumped by stamp")
+	}
+	reread, err := store.GetApplication(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("get after stamp: %v", err)
+	}
+	if !cmp.Equal(got, reread) {
+		t.Fatalf("RETURNING vs SELECT (-returning +select):\n%s", cmp.Diff(got, reread))
+	}
+
+	// Block-only: leaves last_followed_up_at intact, sets the block.
+	blocked := true
+	got, err = store.SetApplicationFollowUp(ctx, store.Pool, app.ID, nil, &blocked)
+	if err != nil {
+		t.Fatalf("set block-only: %v", err)
+	}
+	if !got.FollowUpBlocked {
+		t.Fatalf("FollowUpBlocked after block = false, want true")
+	}
+	if got.LastFollowedUpAt == nil || !got.LastFollowedUpAt.Equal(stamp) {
+		t.Fatalf("LastFollowedUpAt after block = %v, want %v (block leaves stamp alone)", got.LastFollowedUpAt, stamp)
+	}
+
+	// Done combo: clear the block and restamp in one call.
+	stamp2 := stamp.Add(48 * time.Hour)
+	blocked2 := false
+	got, err = store.SetApplicationFollowUp(ctx, store.Pool, app.ID, &stamp2, &blocked2)
+	if err != nil {
+		t.Fatalf("set done: %v", err)
+	}
+	if got.FollowUpBlocked {
+		t.Fatalf("FollowUpBlocked after done = true, want false")
+	}
+	if got.LastFollowedUpAt == nil || !got.LastFollowedUpAt.Equal(stamp2) {
+		t.Fatalf("LastFollowedUpAt after done = %v, want %v", got.LastFollowedUpAt, stamp2)
+	}
+
+	// Missing id surfaces as ErrNotFound.
+	if _, err := store.SetApplicationFollowUp(ctx, store.Pool,
+		"00000000-0000-0000-0000-000000000000", &stamp, nil); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing id: want ErrNotFound, got %v", err)
+	}
+}
+
 // TestIntegrationApplicationsActiveSlotRace proves the partial unique
 // index serializes concurrent inserts: with two goroutines racing to
 // open an application on the same opportunity, exactly one wins, the
