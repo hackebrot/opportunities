@@ -134,3 +134,107 @@ func (s *Service) UpdateApplication(ctx context.Context, id string, in Applicati
 func (s *Service) DeleteApplication(ctx context.Context, id string) error {
 	return s.store.DeleteApplication(ctx, id)
 }
+
+// FollowUpMode is the operation FollowUpApplication should perform.
+type FollowUpMode int
+
+const (
+	// FollowUpStamp marks "just pinged them": writes
+	// last_followed_up_at = now and emits a follow_up event linked to
+	// the application. Leaves follow_up_blocked alone.
+	FollowUpStamp FollowUpMode = iota + 1
+
+	// FollowUpBlock sets follow_up_blocked = true. The dashboard reads
+	// this flag to suppress staleness alerts for the row. Does not
+	// stamp the timestamp and does not emit an event — blocking is a
+	// UI hint, not a contact-with-the-recruiter signal.
+	FollowUpBlock
+
+	// FollowUpDone clears follow_up_blocked, stamps
+	// last_followed_up_at = now, and emits a follow_up event. Used
+	// after a previously blocked application has been pinged again.
+	FollowUpDone
+)
+
+// FollowUpApplication mutates the follow-up tracking columns of an
+// application and (for stamp/done) emits a follow_up event linked to
+// it, all in one transaction.
+//
+// The application's status must be active (applied/in_progress/offer);
+// a terminal application has nothing to follow up on and is rejected
+// with ErrPrecondition. Returns the refreshed application row.
+//
+// Returns ErrValidation for an unknown mode, ErrPrecondition when the
+// application is not active, and store.ErrNotFound for an unknown id.
+func (s *Service) FollowUpApplication(ctx context.Context, id string, mode FollowUpMode) (model.Application, error) {
+	const op = "service.FollowUpApplication"
+
+	switch mode {
+	case FollowUpStamp, FollowUpBlock, FollowUpDone:
+	default:
+		return model.Application{}, fmt.Errorf("%w: unknown follow-up mode", ErrValidation)
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return model.Application{}, fmt.Errorf("%w: application id is required", ErrValidation)
+	}
+
+	tx, err := s.store.Begin(ctx)
+	if err != nil {
+		return model.Application{}, fmt.Errorf("%s: %w", op, err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	app, err := s.store.GetApplicationForUpdate(ctx, tx, id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return model.Application{}, err
+		}
+		return model.Application{}, fmt.Errorf("%s: %w", op, err)
+	}
+	if !IsActiveAppStatus(app.Status) {
+		return model.Application{}, fmt.Errorf("%w: follow-up requires an active application", ErrPrecondition)
+	}
+
+	now := s.clock.Now()
+
+	var (
+		lastFollowedUpAt *time.Time
+		blocked          *bool
+		emitEvent        bool
+	)
+	switch mode {
+	case FollowUpStamp:
+		lastFollowedUpAt = &now
+		emitEvent = true
+	case FollowUpBlock:
+		blocked = new(true)
+	case FollowUpDone:
+		lastFollowedUpAt = &now
+		blocked = new(false)
+		emitEvent = true
+	}
+
+	refreshed, err := s.store.SetApplicationFollowUp(ctx, tx, app.ID, lastFollowedUpAt, blocked)
+	if err != nil {
+		return model.Application{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if emitEvent {
+		appID := app.ID
+		if _, err := s.store.InsertEvent(ctx, tx, store.EventParams{
+			OpportunityID: app.OpportunityID,
+			ApplicationID: &appID,
+			Kind:          "follow_up",
+			OccurredAt:    now,
+		}); err != nil {
+			return model.Application{}, fmt.Errorf("%s: %w", op, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return model.Application{}, fmt.Errorf("%s: commit: %w", op, err)
+	}
+	return refreshed, nil
+}
