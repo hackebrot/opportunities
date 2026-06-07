@@ -97,7 +97,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
 - [x] **T17** (#17) — `opps opportunity apply` + `opps opportunity event
       create` app-scoped contextual menu. Top-level `opps apply`
       registered as alias.
-- [ ] **T18** (#18) — `opps application follow-up [<id>] [--blocked] [--done]`
+- [x] **T18** (#18) — `opps application follow-up [<id>] [--blocked] [--done]`
       (top-level `opps follow-up` as alias): no-flag = stamp
       `last_followed_up_at`; `--blocked` = suppress future staleness
       alerts; `--done` = clear block + restamp.
