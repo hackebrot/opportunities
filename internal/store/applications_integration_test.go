@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/hackebrot/opportunities/internal/model"
 )
@@ -160,6 +161,180 @@ func TestIntegrationApplicationsActiveSlot(t *testing.T) {
 		ApplicationParams{OpportunityID: oppID}, "applied")
 	if !errors.Is(err, ErrActiveExists) {
 		t.Fatalf("second insert: want ErrActiveExists, got %v", err)
+	}
+}
+
+// TestIntegrationSetApplicationFollowUp proves the follow-up writer
+// honors nil-as-"leave alone" semantics for both columns and bumps
+// updated_at. Three calls exercise the three combinations the service
+// layer drives: stamp-only, block-only, and the done combo.
+func TestIntegrationSetApplicationFollowUp(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	store := startPostgresStore(ctx, t)
+	if err := store.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+
+	oppID := seedOpportunity(ctx, t, store, "Acme Corp", "acmecorp")
+	app, err := store.InsertApplication(ctx, store.Pool,
+		ApplicationParams{OpportunityID: oppID}, "applied")
+	if err != nil {
+		t.Fatalf("insert application: %v", err)
+	}
+	if app.FollowUpBlocked {
+		t.Fatalf("fresh application FollowUpBlocked = true, want false")
+	}
+	if app.LastFollowedUpAt != nil {
+		t.Fatalf("fresh application LastFollowedUpAt = %v, want nil", app.LastFollowedUpAt)
+	}
+
+	// Stamp-only: writes last_followed_up_at, leaves block at false.
+	// Also asserts the RETURNING row matches a subsequent GetApplication
+	// — once is enough; the other cases below just check the persisted
+	// state via the returned row directly.
+	stamp := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
+	got, err := store.SetApplicationFollowUp(ctx, store.Pool, app.ID, &stamp, nil)
+	if err != nil {
+		t.Fatalf("set stamp-only: %v", err)
+	}
+	if got.LastFollowedUpAt == nil || !got.LastFollowedUpAt.Equal(stamp) {
+		t.Fatalf("LastFollowedUpAt after stamp = %v, want %v", got.LastFollowedUpAt, stamp)
+	}
+	if got.FollowUpBlocked {
+		t.Fatalf("FollowUpBlocked after stamp = true, want false (stamp leaves block alone)")
+	}
+	if !got.UpdatedAt.After(app.UpdatedAt) {
+		t.Fatalf("updated_at not bumped by stamp")
+	}
+	reread, err := store.GetApplication(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("get after stamp: %v", err)
+	}
+	if !cmp.Equal(got, reread) {
+		t.Fatalf("RETURNING vs SELECT (-returning +select):\n%s", cmp.Diff(got, reread))
+	}
+
+	// Block-only: leaves last_followed_up_at intact, sets the block.
+	blocked := true
+	got, err = store.SetApplicationFollowUp(ctx, store.Pool, app.ID, nil, &blocked)
+	if err != nil {
+		t.Fatalf("set block-only: %v", err)
+	}
+	if !got.FollowUpBlocked {
+		t.Fatalf("FollowUpBlocked after block = false, want true")
+	}
+	if got.LastFollowedUpAt == nil || !got.LastFollowedUpAt.Equal(stamp) {
+		t.Fatalf("LastFollowedUpAt after block = %v, want %v (block leaves stamp alone)", got.LastFollowedUpAt, stamp)
+	}
+
+	// Done combo: clear the block and restamp in one call.
+	stamp2 := stamp.Add(48 * time.Hour)
+	blocked2 := false
+	got, err = store.SetApplicationFollowUp(ctx, store.Pool, app.ID, &stamp2, &blocked2)
+	if err != nil {
+		t.Fatalf("set done: %v", err)
+	}
+	if got.FollowUpBlocked {
+		t.Fatalf("FollowUpBlocked after done = true, want false")
+	}
+	if got.LastFollowedUpAt == nil || !got.LastFollowedUpAt.Equal(stamp2) {
+		t.Fatalf("LastFollowedUpAt after done = %v, want %v", got.LastFollowedUpAt, stamp2)
+	}
+
+	// Missing id surfaces as ErrNotFound.
+	if _, err := store.SetApplicationFollowUp(ctx, store.Pool,
+		"00000000-0000-0000-0000-000000000000", &stamp, nil); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing id: want ErrNotFound, got %v", err)
+	}
+}
+
+// TestIntegrationGetApplicationForUpdate covers the three contract
+// points of the locking reader: it returns the same row shape as
+// GetApplication, a second FOR UPDATE on the same id is rejected by
+// Postgres while the first transaction holds the lock, and a missing
+// id surfaces ErrNotFound.
+func TestIntegrationGetApplicationForUpdate(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	store := startPostgresStore(ctx, t)
+	if err := store.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+
+	oppID := seedOpportunity(ctx, t, store, "Acme Corp", "acmecorp")
+	app, err := store.InsertApplication(ctx, store.Pool,
+		ApplicationParams{OpportunityID: oppID}, "applied")
+	if err != nil {
+		t.Fatalf("insert application: %v", err)
+	}
+
+	tx1, err := store.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin tx1: %v", err)
+	}
+	defer func() { _ = tx1.Rollback(ctx) }()
+
+	locked, err := store.GetApplicationForUpdate(ctx, tx1, app.ID)
+	if err != nil {
+		t.Fatalf("get for update: %v", err)
+	}
+	plain, err := store.GetApplication(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("get plain: %v", err)
+	}
+	if !cmp.Equal(plain, locked) {
+		t.Fatalf("ForUpdate vs Get (-want +got):\n%s", cmp.Diff(plain, locked))
+	}
+
+	// While tx1 holds the row, the second FOR UPDATE must trip SQLSTATE
+	// 55P03 (lock_not_available). lock_timeout caps how long Postgres
+	// waits on the contention; it is not a timing assumption. A held
+	// lock can never be granted in time → 55P03 fires reliably; an
+	// unheld lock returns immediately → err == nil fails the test. The
+	// 100ms value affects only runtime, not correctness.
+	tx2, err := store.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin tx2: %v", err)
+	}
+	defer func() { _ = tx2.Rollback(ctx) }()
+	if _, err := tx2.Exec(ctx, "SET LOCAL lock_timeout = '100ms'"); err != nil {
+		t.Fatalf("set lock_timeout: %v", err)
+	}
+	_, err = store.GetApplicationForUpdate(ctx, tx2, app.ID)
+	if err == nil {
+		t.Fatal("tx2 acquired the lock while tx1 held FOR UPDATE; want 55P03")
+	}
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	if !ok || pgErr.Code != "55P03" {
+		t.Fatalf("tx2 err = %v, want SQLSTATE 55P03 (lock_not_available)", err)
+	}
+	_ = tx2.Rollback(ctx)
+
+	if err := tx1.Rollback(ctx); err != nil {
+		t.Fatalf("rollback tx1: %v", err)
+	}
+
+	// After tx1 releases, a fresh transaction acquires the row without
+	// hitting the lock_timeout — proves the previous failure was the
+	// contended lock, not an unrelated row problem.
+	tx3, err := store.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin tx3: %v", err)
+	}
+	defer func() { _ = tx3.Rollback(ctx) }()
+	if _, err := tx3.Exec(ctx, "SET LOCAL lock_timeout = '100ms'"); err != nil {
+		t.Fatalf("set lock_timeout: %v", err)
+	}
+	if _, err := store.GetApplicationForUpdate(ctx, tx3, app.ID); err != nil {
+		t.Fatalf("get for update after release: %v", err)
+	}
+
+	if _, err := store.GetApplicationForUpdate(ctx, tx3,
+		"00000000-0000-0000-0000-000000000000"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing id: want ErrNotFound, got %v", err)
 	}
 }
 

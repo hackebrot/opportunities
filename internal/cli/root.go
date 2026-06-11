@@ -51,7 +51,9 @@ func NewRoot(version string) *cobra.Command {
 	root.AddCommand(newCompanyCmd())
 	root.AddCommand(newContactCmd())
 	root.AddCommand(newOpportunityCmd())
+	root.AddCommand(newApplicationCmd())
 	root.AddCommand(newApplyAliasCmd())
+	root.AddCommand(newFollowUpAliasCmd())
 
 	return root
 }
@@ -63,4 +65,11 @@ func NewRoot(version string) *cobra.Command {
 // flags and RunE stay in lockstep with the canonical subcommand.
 func newApplyAliasCmd() *cobra.Command {
 	return newOpportunityApplyCmd()
+}
+
+// newFollowUpAliasCmd is the top-level shortcut for `opps application
+// follow-up`. Built from the same factory so flags and RunE stay in
+// lockstep with the canonical subcommand.
+func newFollowUpAliasCmd() *cobra.Command {
+	return newApplicationFollowUpCmd()
 }

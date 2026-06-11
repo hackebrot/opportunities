@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -69,6 +70,34 @@ func TestApplicationInputNormalize(t *testing.T) {
 			}
 			if params.Notes != tt.in.Notes {
 				t.Fatalf("normalize Notes = %q, want %q", params.Notes, tt.in.Notes)
+			}
+		})
+	}
+}
+
+// TestFollowUpApplicationModeValidation pins the pre-DB validation:
+// unknown modes are rejected as ErrValidation, missing ids the same.
+// The DB-touching cases are covered by the integration tests because
+// FollowUpApplication queries the application status before deciding
+// what to write.
+func TestFollowUpApplicationModeValidation(t *testing.T) {
+	t.Parallel()
+
+	svc := &Service{}
+	tests := []struct {
+		name string
+		id   string
+		mode FollowUpMode
+	}{
+		{"zero mode", "id", FollowUpMode(0)},
+		{"bogus mode", "id", FollowUpMode(99)},
+		{"blank id", "   ", FollowUpStamp},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := svc.FollowUpApplication(context.Background(), tt.id, tt.mode); !errors.Is(err, ErrValidation) {
+				t.Fatalf("err=%v, want ErrValidation", err)
 			}
 		})
 	}

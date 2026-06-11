@@ -68,6 +68,21 @@ func (s *Store) GetApplication(ctx context.Context, id string) (model.Applicatio
 	return a, nil
 }
 
+// GetApplicationForUpdate returns the application by id, locking the
+// row with FOR UPDATE for the lifetime of tx so the caller observes a
+// stable status while it computes the write. Missing id is ErrNotFound.
+func (s *Store) GetApplicationForUpdate(ctx context.Context, tx pgx.Tx, id string) (model.Application, error) {
+	const query = `SELECT ` + applicationColumns + `
+		FROM applications
+		WHERE id = $1
+		FOR UPDATE`
+	a, err := scanApplication(tx.QueryRow(ctx, query, id))
+	if err != nil {
+		return model.Application{}, translateApplicationErr("get", err)
+	}
+	return a, nil
+}
+
 // ListApplications returns all applications, most-recently-created first.
 func (s *Store) ListApplications(ctx context.Context) ([]model.Application, error) {
 	const q = `SELECT ` + applicationColumns + `
@@ -147,6 +162,36 @@ func (s *Store) UpdateApplication(ctx context.Context, id string, p ApplicationP
 	a, err := scanApplication(row)
 	if err != nil {
 		return model.Application{}, translateApplicationErr("update", err)
+	}
+	return a, nil
+}
+
+// SetApplicationFollowUp writes the follow-up tracking columns of id,
+// bumps updated_at, and returns the post-update row. A non-nil pointer
+// overwrites the column; nil leaves it untouched, so the caller can
+// stamp the timestamp without touching the block, or toggle the block
+// without restamping. q may be the pool or a transaction so the write
+// can join the same tx that emits the matching follow_up event. Missing
+// id is ErrNotFound.
+//
+// COALESCE($N, col) lets one statement cover every combination of
+// set/unset inputs: a non-NULL parameter wins, a NULL parameter falls
+// through to the existing value (no-op for that column). The
+// ::timestamptz / ::boolean casts give pgx a type to ship NULL under;
+// without them PostgreSQL can't resolve COALESCE and rejects the query.
+// Trade-off: this writer can't clear last_followed_up_at, only set it.
+func (s *Store) SetApplicationFollowUp(ctx context.Context, q Querier, id string, lastFollowedUpAt *time.Time, blocked *bool) (model.Application, error) {
+	const query = `
+		UPDATE applications
+		SET last_followed_up_at = COALESCE($2::timestamptz, last_followed_up_at),
+			follow_up_blocked = COALESCE($3::boolean, follow_up_blocked),
+			updated_at = now()
+		WHERE id = $1
+		RETURNING ` + applicationColumns
+	row := q.QueryRow(ctx, query, id, lastFollowedUpAt, blocked)
+	a, err := scanApplication(row)
+	if err != nil {
+		return model.Application{}, translateApplicationErr("set follow-up", err)
 	}
 	return a, nil
 }
