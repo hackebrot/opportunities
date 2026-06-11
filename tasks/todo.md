@@ -125,6 +125,10 @@ tested; partial-index race regression in place.
       `prompt` helper for text input with a prefilled default. Explicit
       `--field` flags still skip prompts; `--non-interactive` no-flag update
       behaves predictably (no-op or error — decide when building).
+- [ ] **T26** (#54) — Harden prompt-layer non-interactive tests: assert no
+      prompts fire by installing a stub whose `Select`/`Text`/`Confirm`
+      methods fail the test, instead of relying on `InterfaceFrom`'s panic
+      when no `Interface` is installed.
 - [ ] **T23** (#23) — Tag `v0.1.0`: CI green on merge commit; manual smoke run
       covering every exit-gate user story; `git tag v0.1.0`.
 
