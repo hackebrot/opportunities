@@ -35,6 +35,20 @@ func bindApplicationFlags(cmd *cobra.Command, f *applicationFlags) {
 	cmd.Flags().StringVar(&f.notes, "notes", "", "Free-form notes")
 }
 
+// parseAppliedAt parses an RFC3339 timestamp from the --applied-at flag.
+// An empty string returns (nil, nil) so both create (omitted flag) and
+// update (explicit clear) can share one decoder.
+func parseAppliedAt(s string) (*time.Time, error) {
+	if s == "" {
+		return nil, nil
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return nil, fmt.Errorf("--applied-at: %w", err)
+	}
+	return &t, nil
+}
+
 // newApplicationCmd is the noun-first parent for applications.
 func newApplicationCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -68,17 +82,15 @@ func newApplicationCreateCmd() *cobra.Command {
 				return err
 			}
 			defer closeFn()
+			appliedAt, err := parseAppliedAt(f.appliedAt)
+			if err != nil {
+				return err
+			}
 			in := service.ApplicationInput{
 				OpportunityID:    opportunity,
+				AppliedAt:        appliedAt,
 				AppliedWithEmail: f.appliedWithEmail,
 				Notes:            f.notes,
-			}
-			if f.appliedAt != "" {
-				t, err := time.Parse(time.RFC3339, f.appliedAt)
-				if err != nil {
-					return fmt.Errorf("--applied-at: %w", err)
-				}
-				in.AppliedAt = &t
 			}
 			app, err := prompt.AddApplication(cmd.Context(), svc, prompt.ApplicationCreationInput{
 				Application: in,
@@ -160,15 +172,11 @@ func newApplicationUpdateCmd() *cobra.Command {
 			}
 			in := applicationInputFromModel(current)
 			if cmd.Flags().Changed("applied-at") {
-				if f.appliedAt == "" {
-					in.AppliedAt = nil
-				} else {
-					t, err := time.Parse(time.RFC3339, f.appliedAt)
-					if err != nil {
-						return fmt.Errorf("--applied-at: %w", err)
-					}
-					in.AppliedAt = &t
+				appliedAt, err := parseAppliedAt(f.appliedAt)
+				if err != nil {
+					return err
 				}
+				in.AppliedAt = appliedAt
 			}
 			if cmd.Flags().Changed("applied-with-email") {
 				in.AppliedWithEmail = f.appliedWithEmail
