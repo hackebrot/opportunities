@@ -122,10 +122,24 @@ func (s *Service) ListApplications(ctx context.Context) ([]model.Application, er
 // UpdateApplication overwrites the editable, non-status-machine fields of
 // an application. Status transitions are emitted via the events engine,
 // not here.
+//
+// OpportunityID is immutable on update: applications carry the foreign
+// key into the events table (events.opportunity_id, events.application_id)
+// and re-parenting would orphan every event already written against the
+// original opportunity. Callers that need to "move" an application must
+// delete and re-create. ErrPrecondition signals an attempted change;
+// preserving the current value (no-op) is allowed.
 func (s *Service) UpdateApplication(ctx context.Context, id string, in ApplicationInput) (model.Application, error) {
 	params, err := in.normalize()
 	if err != nil {
 		return model.Application{}, err
+	}
+	current, err := s.store.GetApplication(ctx, id)
+	if err != nil {
+		return model.Application{}, err
+	}
+	if params.OpportunityID != current.OpportunityID {
+		return model.Application{}, fmt.Errorf("%w: application opportunity_id is immutable", ErrPrecondition)
 	}
 	return s.store.UpdateApplication(ctx, id, params)
 }

@@ -319,3 +319,71 @@ func TestIntegrationAddApplicationValidation(t *testing.T) {
 		t.Fatalf("applications after validation failure = %d, want 0", n)
 	}
 }
+
+// TestIntegrationUpdateApplicationRejectsReparent pins the immutability
+// invariant on UpdateApplication: handing in a different opportunity_id
+// must surface ErrPrecondition without touching the row. Re-parenting
+// would orphan the events already written against the original
+// opportunity, so the service rejects rather than the CLI surface alone.
+func TestIntegrationUpdateApplicationRejectsReparent(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+	svc := service.New(st, testClock)
+
+	oppID := seedOpportunity(ctx, t, svc)
+	app, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID})
+	if err != nil {
+		t.Fatalf("add application: %v", err)
+	}
+
+	// A second opportunity on the same company is the target of the
+	// attempted re-parent.
+	opp, err := st.GetOpportunity(ctx, oppID)
+	if err != nil {
+		t.Fatalf("get opportunity: %v", err)
+	}
+	otherOpp, err := svc.AddOpportunity(ctx, service.OpportunityCreationInput{
+		Company:     service.OpportunityCompanyChoice{ID: opp.CompanyID},
+		Opportunity: service.OpportunityInput{Source: "outbound"},
+	})
+	if err != nil {
+		t.Fatalf("add second opportunity: %v", err)
+	}
+
+	_, err = svc.UpdateApplication(ctx, app.ID, service.ApplicationInput{
+		OpportunityID: otherOpp.ID,
+		Notes:         "attempted re-parent",
+	})
+	if !errors.Is(err, service.ErrPrecondition) {
+		t.Fatalf("re-parent: err=%v, want ErrPrecondition", err)
+	}
+
+	// The row stays put.
+	after, err := st.GetApplication(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("get application: %v", err)
+	}
+	if after.OpportunityID != oppID {
+		t.Fatalf("opportunity_id after rejected update = %q, want %q", after.OpportunityID, oppID)
+	}
+	if after.Notes != "" {
+		t.Fatalf("notes after rejected update = %q, want empty", after.Notes)
+	}
+
+	// Same OpportunityID on the input is a no-op write, not a rejection.
+	updated, err := svc.UpdateApplication(ctx, app.ID, service.ApplicationInput{
+		OpportunityID: oppID,
+		Notes:         "ok",
+	})
+	if err != nil {
+		t.Fatalf("preserving opportunity_id: %v", err)
+	}
+	if updated.Notes != "ok" {
+		t.Fatalf("notes after no-op opportunity update = %q, want %q", updated.Notes, "ok")
+	}
+}
