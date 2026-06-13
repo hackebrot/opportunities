@@ -101,7 +101,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
       (top-level `opps follow-up` as alias): no-flag = stamp
       `last_followed_up_at`; `--blocked` = suppress future staleness
       alerts; `--done` = clear block + restamp.
-- [ ] **T19** (#19) — Application prompts + CRUD CLI: noun-first
+- [x] **T19** (#19) — Application prompts + CRUD CLI: noun-first
       `opps application` parent with `create` (full from-scratch with
       chained inline-create through opportunity), `list`, `show`,
       `update`, `rm`.
