@@ -483,6 +483,7 @@ type applicationJSONShape struct {
 	ID                    string  `json:"id"`
 	OpportunityID         string  `json:"opportunity_id"`
 	Status                string  `json:"status"`
+	Notes                 string  `json:"notes"`
 	ArchiveReasonCategory *string `json:"archive_reason_category"`
 }
 

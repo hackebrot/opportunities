@@ -5,8 +5,12 @@ package cli_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/hackebrot/opportunities/internal/prompt"
 )
 
 // followUpJSONShape is the subset of applicationJSON the follow-up
@@ -154,5 +158,110 @@ func TestIntegrationFollowUpAliasViaCLI(t *testing.T) {
 	stamp := decodeFollowUpJSON(t, aliasOut)
 	if stamp.LastFollowedUpAt == nil || *stamp.LastFollowedUpAt == "" {
 		t.Fatalf("alias follow-up: LastFollowedUpAt empty: %+v", stamp)
+	}
+}
+
+// TestIntegrationApplicationCRUDViaCLI drives `opps application
+// {create,list,show,update,rm}` end-to-end against a real Postgres.
+func TestIntegrationApplicationCRUDViaCLI(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+
+	dsn := st.Pool.Config().ConnString()
+	t.Setenv("OPPS_DATABASE_URL", dsn)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	companyOut := runCmd(ctx, t, "--non-interactive", "company", "create",
+		"--name", "Acme Corp", "--json")
+	companyID := decodeCompanyJSON(t, companyOut).ID
+
+	oppOut := runCmd(ctx, t, "--non-interactive", "opportunity", "create",
+		"--company", companyID,
+		"--role-title", "Staff Engineer",
+		"--source", "outbound",
+		"--office-days-per-week", "0",
+		"--json")
+	oppID := decodeOpportunityJSON(t, oppOut).ID
+
+	// Create application via the canonical noun-first form, with all
+	// fields supplied as flags.
+	appliedAt := "2026-06-10T12:00:00Z"
+	createOut := runCmd(ctx, t, "--non-interactive", "application", "create",
+		"--opportunity", oppID,
+		"--applied-at", appliedAt,
+		"--applied-with-email", "me@example.test",
+		"--notes", "applied via careers page",
+		"--json")
+	created := decodeApplicationJSON(t, createOut)
+	if created.ID == "" {
+		t.Fatalf("create returned empty id: %q", createOut)
+	}
+	if created.Status != "applied" {
+		t.Fatalf("create status = %q, want applied", created.Status)
+	}
+	if created.OpportunityID != oppID {
+		t.Fatalf("create opportunity_id = %q, want %q", created.OpportunityID, oppID)
+	}
+
+	// latest_status on the opportunity should be applied now.
+	showOpp := runCmd(ctx, t, "opportunity", "show", oppID, "--json")
+	if got := decodeOpportunityJSON(t, showOpp).LatestStatus; got != "applied" {
+		t.Fatalf("opportunity latest_status = %q, want applied", got)
+	}
+
+	// list applications --json should contain exactly one row.
+	listOut := runCmd(ctx, t, "application", "list", "--json")
+	var listed []map[string]any
+	if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
+		t.Fatalf("list json: %v\n%s", err, listOut)
+	}
+	if len(listed) != 1 || listed[0]["id"] != created.ID {
+		t.Fatalf("list: want one row with id=%s, got %v", created.ID, listed)
+	}
+
+	// show <id> --json round-trips.
+	showOut := runCmd(ctx, t, "application", "show", created.ID, "--json")
+	if shown := decodeApplicationJSON(t, showOut); shown.ID != created.ID {
+		t.Fatalf("show id = %q, want %q", shown.ID, created.ID)
+	}
+
+	// update notes; status must not change (status-machine columns are
+	// off-limits to UpdateApplication).
+	wantNotes := "recruiter replied — phone screen scheduled"
+	updateOut := runCmd(ctx, t, "application", "update", created.ID,
+		"--notes", wantNotes, "--json")
+	updated := decodeApplicationJSON(t, updateOut)
+	if updated.Status != "applied" {
+		t.Fatalf("update status = %q, want applied (unchanged)", updated.Status)
+	}
+	if updated.Notes != wantNotes {
+		t.Fatalf("update notes = %q, want %q", updated.Notes, wantNotes)
+	}
+
+	// rm without --yes must fail in non-interactive mode (no confirm
+	// possible).
+	if _, err := tryRun(ctx, t, "--non-interactive", "application", "rm", created.ID); !errors.Is(err, prompt.ErrNonInteractive) {
+		t.Fatalf("rm without --yes in non-interactive: err=%v, want ErrNonInteractive", err)
+	}
+
+	// rm --yes removes the row.
+	if _, err := tryRun(ctx, t, "application", "rm", created.ID, "--yes"); err != nil {
+		t.Fatalf("rm: %v", err)
+	}
+	emptyOut := strings.TrimSpace(runCmd(ctx, t, "application", "list", "--json"))
+	if emptyOut != "null" && emptyOut != "[]" {
+		t.Fatalf("list after rm: want null/[], got %q", emptyOut)
+	}
+
+	// create without --opportunity in non-interactive mode must fail —
+	// applications are permanent associations, so the picker refuses to
+	// auto-select even when one opportunity exists.
+	if _, err := tryRun(ctx, t, "--non-interactive", "application", "create"); !errors.Is(err, prompt.ErrNonInteractive) {
+		t.Fatalf("create without --opportunity: err=%v, want ErrNonInteractive", err)
 	}
 }

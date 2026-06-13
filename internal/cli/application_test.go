@@ -4,19 +4,39 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/spf13/cobra"
 
 	"github.com/hackebrot/opportunities/internal/model"
 	"github.com/hackebrot/opportunities/internal/service"
 )
 
-func TestApplicationFollowUpFlags(t *testing.T) {
+// TestApplicationSubcommandFlags asserts every documented flag is wired
+// so future refactors that drop a flag fail loudly here instead of at
+// the user.
+func TestApplicationSubcommandFlags(t *testing.T) {
 	t.Parallel()
 
-	cmd := newApplicationFollowUpCmd()
-	for _, f := range []string{"blocked", "done", "json"} {
-		if cmd.Flags().Lookup(f) == nil {
-			t.Errorf("application follow-up: flag --%s missing", f)
-		}
+	cases := map[string]struct {
+		cmd  func() *cobra.Command
+		want []string
+	}{
+		"application create":    {newApplicationCreateCmd, []string{"opportunity", "applied-at", "applied-with-email", "notes", "json"}},
+		"application list":      {newApplicationListCmd, []string{"json"}},
+		"application show":      {newApplicationShowCmd, []string{"json"}},
+		"application update":    {newApplicationUpdateCmd, []string{"applied-at", "applied-with-email", "notes", "json"}},
+		"application rm":        {newApplicationRmCmd, []string{"yes"}},
+		"application follow-up": {newApplicationFollowUpCmd, []string{"blocked", "done", "json"}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			cmd := tc.cmd()
+			for _, f := range tc.want {
+				if cmd.Flags().Lookup(f) == nil {
+					t.Errorf("%s: flag --%s missing", name, f)
+				}
+			}
+		})
 	}
 }
 
