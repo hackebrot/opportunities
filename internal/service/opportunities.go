@@ -192,11 +192,6 @@ func (s *Service) DeleteOpportunity(ctx context.Context, id string) error {
 func (s *Service) AddOpportunity(ctx context.Context, in OpportunityCreationInput) (model.Opportunity, error) {
 	const op = "service.AddOpportunity"
 
-	in, err := in.normalize()
-	if err != nil {
-		return model.Opportunity{}, err
-	}
-
 	tx, err := s.store.Begin(ctx)
 	if err != nil {
 		return model.Opportunity{}, fmt.Errorf("%s: %w", op, err)
@@ -204,9 +199,35 @@ func (s *Service) AddOpportunity(ctx context.Context, in OpportunityCreationInpu
 	// Safety net for the error paths below; a no-op once Commit succeeds.
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	opp, err := s.addOpportunityTx(ctx, tx, in)
+	if err != nil {
+		return model.Opportunity{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return model.Opportunity{}, fmt.Errorf("%s: commit: %w", op, err)
+	}
+	return opp, nil
+}
+
+// addOpportunityTx writes the opportunity graph using the supplied
+// Querier and runs no Begin/Commit of its own, so callers can compose it
+// into a larger transaction. AddOpportunity wraps it directly;
+// AddApplication chains it ahead of the application insert so an
+// inline-created opportunity and the application that depends on it
+// commit atomically. Mirrors the createCompany/createContact tx-scoped
+// helper shape.
+func (s *Service) addOpportunityTx(ctx context.Context, q store.Querier, in OpportunityCreationInput) (model.Opportunity, error) {
+	const op = "service.addOpportunityTx"
+
+	in, err := in.normalize()
+	if err != nil {
+		return model.Opportunity{}, err
+	}
+
 	companyID := in.Company.ID
 	if in.Company.New != nil {
-		c, err := s.createCompany(ctx, tx, *in.Company.New)
+		c, err := s.createCompany(ctx, q, *in.Company.New)
 		if err != nil {
 			return model.Opportunity{}, err
 		}
@@ -220,12 +241,12 @@ func (s *Service) AddOpportunity(ctx context.Context, in OpportunityCreationInpu
 		return model.Opportunity{}, err
 	}
 
-	opp, err := s.store.InsertOpportunity(ctx, tx, params, "watching")
+	opp, err := s.store.InsertOpportunity(ctx, q, params, "watching")
 	if err != nil {
 		return model.Opportunity{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	if _, err := s.store.InsertEvent(ctx, tx, store.EventParams{
+	if _, err := s.store.InsertEvent(ctx, q, store.EventParams{
 		OpportunityID: opp.ID,
 		Kind:          "added",
 		OccurredAt:    s.clock.Now(),
@@ -245,19 +266,16 @@ func (s *Service) AddOpportunity(ctx context.Context, in OpportunityCreationInpu
 			if newContact.CompanyID == nil {
 				newContact.CompanyID = &companyID
 			}
-			c, err := s.createContact(ctx, tx, newContact)
+			c, err := s.createContact(ctx, q, newContact)
 			if err != nil {
 				return model.Opportunity{}, err
 			}
 			contactID = c.ID
 		}
-		if err := s.store.AttachOpportunityContact(ctx, tx, opp.ID, contactID, in.Contact.Relationship); err != nil {
+		if err := s.store.AttachOpportunityContact(ctx, q, opp.ID, contactID, in.Contact.Relationship); err != nil {
 			return model.Opportunity{}, fmt.Errorf("%s: %w", op, err)
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return model.Opportunity{}, fmt.Errorf("%s: commit: %w", op, err)
-	}
 	return opp, nil
 }
