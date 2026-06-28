@@ -29,11 +29,13 @@ func TestIntegrationAddApplication(t *testing.T) {
 	oppID := seedOpportunity(ctx, t, svc)
 
 	appliedAt := time.Date(2026, 5, 1, 9, 0, 0, 0, time.UTC)
-	app, err := svc.AddApplication(ctx, service.ApplicationInput{
-		OpportunityID:    oppID,
-		AppliedAt:        &appliedAt,
-		AppliedWithEmail: "me@example.test",
-		Notes:            "applied via careers page",
+	app, err := svc.AddApplication(ctx, service.ApplicationCreationInput{
+		Application: service.ApplicationInput{
+			OpportunityID:    oppID,
+			AppliedAt:        &appliedAt,
+			AppliedWithEmail: "me@example.test",
+			Notes:            "applied via careers page",
+		},
 	})
 	if err != nil {
 		t.Fatalf("add application: %v", err)
@@ -81,6 +83,134 @@ func TestIntegrationAddApplication(t *testing.T) {
 	}
 }
 
+// TestIntegrationAddApplicationInlineGraph proves the inline-create chain
+// lands the whole graph in one transaction: a company, an opportunity,
+// its "added" event, the application (status "applied"), and the matching
+// "applied" event — with the opportunity's latest_status flipped to
+// "applied". This is the SPEC "[+ New …] … one transaction" promise,
+// exercised through AddApplication rather than AddOpportunity.
+func TestIntegrationAddApplicationInlineGraph(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+	svc := service.New(st, testClock)
+
+	app, err := svc.AddApplication(ctx, service.ApplicationCreationInput{
+		Application: service.ApplicationInput{AppliedWithEmail: "me@example.test"},
+		Opportunity: &service.OpportunityCreationInput{
+			Company: service.OpportunityCompanyChoice{
+				New: &service.CompanyInput{Name: "Acme Corp"},
+			},
+			Opportunity: service.OpportunityInput{
+				RoleTitle: "Member of Technical Staff",
+				Source:    "inbound_founder",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddApplication: %v", err)
+	}
+	if app.Status != "applied" {
+		t.Fatalf("application status = %q, want applied", app.Status)
+	}
+
+	// One company, one opportunity, one application — all from the single
+	// inline call.
+	for table, want := range map[string]int{
+		"companies":     1,
+		"opportunities": 1,
+		"applications":  1,
+	} {
+		var n int
+		if err := st.Pool.QueryRow(ctx, `SELECT count(*) FROM `+table).Scan(&n); err != nil {
+			t.Fatalf("count %s: %v", table, err)
+		}
+		if n != want {
+			t.Fatalf("%s = %d, want %d", table, n, want)
+		}
+	}
+
+	// The application points at the inline-created opportunity, and that
+	// opportunity's latest_status has flipped to applied.
+	opp, err := st.GetOpportunity(ctx, app.OpportunityID)
+	if err != nil {
+		t.Fatalf("get opportunity: %v", err)
+	}
+	if opp.CompanyName != "Acme Corp" {
+		t.Fatalf("company name = %q, want Acme Corp", opp.CompanyName)
+	}
+	if opp.LatestStatus != "applied" {
+		t.Fatalf("latest_status = %q, want applied", opp.LatestStatus)
+	}
+
+	// Exactly one "added" event (from the opportunity insert) and one
+	// "applied" event linked to the new application.
+	var added, applied int
+	if err := st.Pool.QueryRow(ctx, `
+		SELECT
+			count(*) FILTER (WHERE kind = 'added'),
+			count(*) FILTER (WHERE kind = 'applied' AND application_id = $2)
+		FROM events WHERE opportunity_id = $1`, app.OpportunityID, app.ID).
+		Scan(&added, &applied); err != nil {
+		t.Fatalf("count events: %v", err)
+	}
+	if added != 1 {
+		t.Fatalf("added events = %d, want 1", added)
+	}
+	if applied != 1 {
+		t.Fatalf("applied events = %d, want 1", applied)
+	}
+}
+
+// TestIntegrationAddApplicationRollsBackOnFailure proves the cross-entity
+// atomicity guarantee: when a later step of an inline AddApplication fails
+// (here, a dangling existing-contact id in the embedded opportunity graph,
+// reached only after the company and opportunity rows are already
+// inserted), the whole transaction rolls back. No orphan opportunity (or
+// company, event, application) survives — the regression the SPEC's "one
+// transaction" promise guards against.
+func TestIntegrationAddApplicationRollsBackOnFailure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+	svc := service.New(st, testClock)
+
+	_, err := svc.AddApplication(ctx, service.ApplicationCreationInput{
+		Opportunity: &service.OpportunityCreationInput{
+			Company: service.OpportunityCompanyChoice{
+				New: &service.CompanyInput{Name: "Example Corp"},
+			},
+			Opportunity: service.OpportunityInput{Source: "outbound"},
+			Contact: &service.OpportunityContactChoice{
+				ID:           "00000000-0000-0000-0000-000000000000",
+				Relationship: "recruiter",
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error on dangling contact id")
+	}
+
+	for _, table := range []string{"companies", "opportunities", "events", "contacts", "opportunity_contacts", "applications"} {
+		var rowCount int
+		if err := st.Pool.QueryRow(ctx, `SELECT count(*) FROM `+table).Scan(&rowCount); err != nil {
+			t.Errorf("row count in %s: %v", table, err)
+			continue
+		}
+		if rowCount != 0 {
+			t.Errorf("row count in %s after rollback = %d, want 0", table, rowCount)
+		}
+	}
+}
+
 // TestIntegrationAddApplicationActiveExists proves back-to-back
 // AddApplication calls on the same opportunity collapse to one win plus
 // store.ErrActiveExists — the partial unique index is the contract.
@@ -95,10 +225,10 @@ func TestIntegrationAddApplicationActiveExists(t *testing.T) {
 	svc := service.New(st, testClock)
 	oppID := seedOpportunity(ctx, t, svc)
 
-	if _, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID}); err != nil {
+	if _, err := svc.AddApplication(ctx, service.ApplicationCreationInput{Application: service.ApplicationInput{OpportunityID: oppID}}); err != nil {
 		t.Fatalf("first add: %v", err)
 	}
-	_, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID})
+	_, err := svc.AddApplication(ctx, service.ApplicationCreationInput{Application: service.ApplicationInput{OpportunityID: oppID}})
 	if !errors.Is(err, store.ErrActiveExists) {
 		t.Fatalf("second add: want store.ErrActiveExists, got %v", err)
 	}
@@ -130,7 +260,7 @@ func TestIntegrationAddApplicationReapply(t *testing.T) {
 	svc := service.New(st, testClock)
 	oppID := seedOpportunity(ctx, t, svc)
 
-	first, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID})
+	first, err := svc.AddApplication(ctx, service.ApplicationCreationInput{Application: service.ApplicationInput{OpportunityID: oppID}})
 	if err != nil {
 		t.Fatalf("first add: %v", err)
 	}
@@ -146,7 +276,7 @@ func TestIntegrationAddApplicationReapply(t *testing.T) {
 		t.Fatalf("reject first: %v", err)
 	}
 
-	second, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID})
+	second, err := svc.AddApplication(ctx, service.ApplicationCreationInput{Application: service.ApplicationInput{OpportunityID: oppID}})
 	if err != nil {
 		t.Fatalf("re-apply: %v", err)
 	}
@@ -187,7 +317,7 @@ func TestIntegrationAddApplicationConcurrent(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			<-start
-			_, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID})
+			_, err := svc.AddApplication(ctx, service.ApplicationCreationInput{Application: service.ApplicationInput{OpportunityID: oppID}})
 			results[idx] = err
 		}(i)
 	}
@@ -243,8 +373,10 @@ func TestIntegrationAddApplicationUnknownOpportunity(t *testing.T) {
 	}
 	svc := service.New(st, testClock)
 
-	_, err := svc.AddApplication(ctx, service.ApplicationInput{
-		OpportunityID: "00000000-0000-0000-0000-000000000000",
+	_, err := svc.AddApplication(ctx, service.ApplicationCreationInput{
+		Application: service.ApplicationInput{
+			OpportunityID: "00000000-0000-0000-0000-000000000000",
+		},
 	})
 	if !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("unknown opportunity: want store.ErrNotFound, got %v", err)
@@ -278,7 +410,7 @@ func TestIntegrationAddApplicationArchivedOpportunity(t *testing.T) {
 		t.Fatalf("archive: %v", err)
 	}
 
-	_, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID})
+	_, err := svc.AddApplication(ctx, service.ApplicationCreationInput{Application: service.ApplicationInput{OpportunityID: oppID}})
 	if !errors.Is(err, service.ErrPrecondition) {
 		t.Fatalf("apply to archived: want ErrPrecondition, got %v", err)
 	}
@@ -307,7 +439,7 @@ func TestIntegrationAddApplicationValidation(t *testing.T) {
 	}
 	svc := service.New(st, testClock)
 
-	if _, err := svc.AddApplication(ctx, service.ApplicationInput{}); !errors.Is(err, service.ErrValidation) {
+	if _, err := svc.AddApplication(ctx, service.ApplicationCreationInput{}); !errors.Is(err, service.ErrValidation) {
 		t.Fatalf("missing opportunity: want ErrValidation, got %v", err)
 	}
 
@@ -336,7 +468,7 @@ func TestIntegrationUpdateApplicationRejectsReparent(t *testing.T) {
 	svc := service.New(st, testClock)
 
 	oppID := seedOpportunity(ctx, t, svc)
-	app, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID})
+	app, err := svc.AddApplication(ctx, service.ApplicationCreationInput{Application: service.ApplicationInput{OpportunityID: oppID}})
 	if err != nil {
 		t.Fatalf("add application: %v", err)
 	}
