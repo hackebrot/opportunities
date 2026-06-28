@@ -19,7 +19,7 @@ import (
 type fakeApplicationCreator struct {
 	fakeOpportunityCreator
 	opportunities []model.Opportunity
-	gotApp        service.ApplicationInput
+	gotApp        service.ApplicationCreationInput
 	outApp        model.Application
 	appErr        error
 	appCalls      int
@@ -29,7 +29,7 @@ func (f *fakeApplicationCreator) ListOpportunities(_ context.Context) ([]model.O
 	return f.opportunities, nil
 }
 
-func (f *fakeApplicationCreator) AddApplication(_ context.Context, in service.ApplicationInput) (model.Application, error) {
+func (f *fakeApplicationCreator) AddApplication(_ context.Context, in service.ApplicationCreationInput) (model.Application, error) {
 	f.gotApp = in
 	f.appCalls++
 	return f.outApp, f.appErr
@@ -63,10 +63,12 @@ func TestAddApplicationInteractivePicksExistingOpportunity(t *testing.T) {
 	if creator.appCalls != 1 {
 		t.Fatalf("AddApplication calls = %d, want 1", creator.appCalls)
 	}
-	want := service.ApplicationInput{
-		OpportunityID:    "o1",
-		AppliedWithEmail: "me@example.test",
-		Notes:            "applied via careers page",
+	want := service.ApplicationCreationInput{
+		Application: service.ApplicationInput{
+			OpportunityID:    "o1",
+			AppliedWithEmail: "me@example.test",
+			Notes:            "applied via careers page",
+		},
 	}
 	if !cmp.Equal(want, creator.gotApp) {
 		t.Fatalf("application input (-want +got):\n%s", cmp.Diff(want, creator.gotApp))
@@ -74,10 +76,11 @@ func TestAddApplicationInteractivePicksExistingOpportunity(t *testing.T) {
 }
 
 // TestAddApplicationInteractiveCreatesOpportunityInline proves the
-// "[+ New ...]" branch of the opportunity picker dives into
-// AddOpportunity (including its own chained company picker), then
-// returns the persisted opportunity id and continues with the
-// application fields.
+// "[+ New ...]" branch of the opportunity picker collects the full
+// opportunity graph (including its own chained company picker) and embeds
+// it into a single AddApplication call, rather than persisting the
+// opportunity through a separate AddOpportunity call. This is what keeps
+// the whole graph in one transaction.
 func TestAddApplicationInteractiveCreatesOpportunityInline(t *testing.T) {
 	t.Parallel()
 
@@ -105,21 +108,28 @@ func TestAddApplicationInteractiveCreatesOpportunityInline(t *testing.T) {
 	ctx := prompt.WithInterface(context.Background(), stub)
 
 	creator := &fakeApplicationCreator{}
-	creator.out = model.Opportunity{ID: "o-new"}
 	creator.outApp = model.Application{ID: "a1"}
 
 	_, err := prompt.AddApplication(ctx, creator, prompt.ApplicationCreationInput{})
 	if err != nil {
 		t.Fatalf("AddApplication: %v", err)
 	}
-	if creator.calls != 1 {
-		t.Fatalf("AddOpportunity calls = %d, want 1", creator.calls)
+	// The inline branch must not persist the opportunity on its own; the
+	// graph rides along on the single AddApplication call instead.
+	if creator.calls != 0 {
+		t.Fatalf("AddOpportunity calls = %d, want 0 (graph embedded in AddApplication)", creator.calls)
 	}
 	if creator.appCalls != 1 {
 		t.Fatalf("AddApplication calls = %d, want 1", creator.appCalls)
 	}
-	if creator.gotApp.OpportunityID != "o-new" {
-		t.Fatalf("OpportunityID = %q, want o-new", creator.gotApp.OpportunityID)
+	if creator.gotApp.Application.OpportunityID != "" {
+		t.Fatalf("Application.OpportunityID = %q, want empty for an inline-created opportunity", creator.gotApp.Application.OpportunityID)
+	}
+	if creator.gotApp.Opportunity == nil {
+		t.Fatal("Opportunity = nil, want the inline-collected graph")
+	}
+	if creator.gotApp.Opportunity.Company.New == nil || creator.gotApp.Opportunity.Company.New.Name != "Foo Corp" {
+		t.Fatalf("Opportunity.Company.New = %+v, want Foo Corp", creator.gotApp.Opportunity.Company.New)
 	}
 }
 
@@ -141,8 +151,9 @@ func TestAddApplicationNonInteractiveRespectsPrefill(t *testing.T) {
 	if _, err := prompt.AddApplication(ctx, creator, prefill); err != nil {
 		t.Fatalf("AddApplication: %v", err)
 	}
-	if !cmp.Equal(prefill.Application, creator.gotApp) {
-		t.Fatalf("application input (-want +got):\n%s", cmp.Diff(prefill.Application, creator.gotApp))
+	want := service.ApplicationCreationInput{Application: prefill.Application}
+	if !cmp.Equal(want, creator.gotApp) {
+		t.Fatalf("application input (-want +got):\n%s", cmp.Diff(want, creator.gotApp))
 	}
 }
 
