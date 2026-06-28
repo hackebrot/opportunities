@@ -9,12 +9,20 @@ import (
 	"github.com/hackebrot/opportunities/internal/service"
 )
 
+// opportunityReader is the read-only subset the opportunity-input
+// collector needs: the company and contact list pickers. AddApplication's
+// inline-create branch reuses collectOpportunityInput through this
+// narrower interface, so it does not have to satisfy AddOpportunity.
+type opportunityReader interface {
+	ListCompanies(ctx context.Context) ([]model.Company, error)
+	ListContacts(ctx context.Context) ([]model.Contact, error)
+}
+
 // OpportunityCreator is the subset of *service.Service needed by
 // AddOpportunity. Defined as an interface so tests can substitute a fake
 // without standing up a real store.
 type OpportunityCreator interface {
-	ListCompanies(ctx context.Context) ([]model.Company, error)
-	ListContacts(ctx context.Context) ([]model.Contact, error)
+	opportunityReader
 	AddOpportunity(ctx context.Context, in service.OpportunityCreationInput) (model.Opportunity, error)
 }
 
@@ -82,6 +90,19 @@ var opportunityOfficeDays = []Option{
 // In non-interactive mode the caller must supply at minimum
 // prefill.Company.ID (or prefill.Company.New) and prefill.Opportunity.Source.
 func AddOpportunity(ctx context.Context, c OpportunityCreator, prefill service.OpportunityCreationInput) (model.Opportunity, error) {
+	in, err := collectOpportunityInput(ctx, c, prefill)
+	if err != nil {
+		return model.Opportunity{}, err
+	}
+	return c.AddOpportunity(ctx, in)
+}
+
+// collectOpportunityInput runs the company picker, the opportunity-body
+// prompts, and the optional contact picker, returning the assembled
+// creation input *without* persisting anything. AddOpportunity hands the
+// result straight to the service; AddApplication embeds it into an
+// ApplicationCreationInput so the whole graph lands in one transaction.
+func collectOpportunityInput(ctx context.Context, c opportunityReader, prefill service.OpportunityCreationInput) (service.OpportunityCreationInput, error) {
 	in := prefill
 
 	// Step 1: company. pickOrCaptureNewCompany shows an interactive
@@ -93,13 +114,13 @@ func AddOpportunity(ctx context.Context, c OpportunityCreator, prefill service.O
 	// deliberately via --company.
 	if in.Company.ID == "" && in.Company.New == nil {
 		if err := resolveCompanyChoice(ctx, c, &in.Company); err != nil {
-			return model.Opportunity{}, err
+			return service.OpportunityCreationInput{}, err
 		}
 	}
 
 	// Step 2: opportunity body — text fields and contextual menus.
 	if err := promptOpportunityBody(ctx, &in.Opportunity); err != nil {
-		return model.Opportunity{}, err
+		return service.OpportunityCreationInput{}, err
 	}
 
 	// Step 3: contact attachment is optional. If the caller pre-filled
@@ -108,25 +129,25 @@ func AddOpportunity(ctx context.Context, c OpportunityCreator, prefill service.O
 	if in.Contact == nil && !IsNonInteractive(ctx) {
 		add, err := InterfaceFrom(ctx).Confirm("Add a contact for this opportunity?")
 		if err != nil {
-			return model.Opportunity{}, err
+			return service.OpportunityCreationInput{}, err
 		}
 		if add {
 			contact, err := resolveContactChoice(ctx, c, in.Company)
 			if err != nil {
-				return model.Opportunity{}, err
+				return service.OpportunityCreationInput{}, err
 			}
 			in.Contact = contact
 		}
 	}
 
-	return c.AddOpportunity(ctx, in)
+	return in, nil
 }
 
 // resolveCompanyChoice prompts the user to pick an existing company or
 // capture a new one for inline creation in the same tx. The new branch
 // returns a CompanyInput rather than persisting — service writes happen
 // later inside the bundled transaction.
-func resolveCompanyChoice(ctx context.Context, c OpportunityCreator, choice *service.OpportunityCompanyChoice) error {
+func resolveCompanyChoice(ctx context.Context, c opportunityReader, choice *service.OpportunityCompanyChoice) error {
 	companies, err := c.ListCompanies(ctx)
 	if err != nil {
 		return err
@@ -208,7 +229,7 @@ func captureContactInput(ctx context.Context, in *service.ContactInput) error {
 	return textOptional(ctx, "Notes (optional)", &in.Notes)
 }
 
-func resolveContactChoice(ctx context.Context, c OpportunityCreator, company service.OpportunityCompanyChoice) (*service.OpportunityContactChoice, error) {
+func resolveContactChoice(ctx context.Context, c opportunityReader, company service.OpportunityCompanyChoice) (*service.OpportunityContactChoice, error) {
 	contacts, err := c.ListContacts(ctx)
 	if err != nil {
 		return nil, err
