@@ -100,7 +100,9 @@ func newOpportunityApplyCmd() *cobra.Command {
 				}
 				in.AppliedAt = &t
 			}
-			app, err := svc.AddApplication(cmd.Context(), in)
+			app, err := svc.AddApplication(cmd.Context(), service.ApplicationCreationInput{
+				Application: in,
+			})
 			if err != nil {
 				return err
 			}
