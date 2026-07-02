@@ -75,6 +75,65 @@ func TestApplicationInputNormalize(t *testing.T) {
 	}
 }
 
+// TestApplicationCreationInputValidate pins the "exactly one opportunity
+// source" contract: an existing id XOR an inline graph, never both and
+// never neither.
+func TestApplicationCreationInputValidate(t *testing.T) {
+	t.Parallel()
+
+	oppID := "00000000-0000-0000-0000-000000000001"
+	inline := &OpportunityCreationInput{
+		Company:     OpportunityCompanyChoice{New: &CompanyInput{Name: "Acme Corp"}},
+		Opportunity: OpportunityInput{Source: "outbound"},
+	}
+
+	tests := []struct {
+		name    string
+		in      ApplicationCreationInput
+		wantErr bool
+	}{
+		{
+			name: "existing id only",
+			in:   ApplicationCreationInput{Application: ApplicationInput{OpportunityID: oppID}},
+		},
+		{
+			name: "inline graph only",
+			in:   ApplicationCreationInput{Opportunity: inline},
+		},
+		{
+			name:    "both set",
+			in:      ApplicationCreationInput{Application: ApplicationInput{OpportunityID: oppID}, Opportunity: inline},
+			wantErr: true,
+		},
+		{
+			name:    "neither set",
+			in:      ApplicationCreationInput{},
+			wantErr: true,
+		},
+		{
+			name:    "blank id counts as unset",
+			in:      ApplicationCreationInput{Application: ApplicationInput{OpportunityID: "   "}},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := tt.in.validate()
+			if tt.wantErr {
+				if !errors.Is(err, ErrValidation) {
+					t.Fatalf("validate(%+v): err=%v, want ErrValidation", tt.in, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("validate(%+v): unexpected error: %v", tt.in, err)
+			}
+		})
+	}
+}
+
 // TestFollowUpApplicationModeValidation pins the pre-DB validation:
 // unknown modes are rejected as ErrValidation, missing ids the same.
 // The DB-touching cases are covered by the integration tests because

@@ -41,10 +41,40 @@ func (in ApplicationInput) normalize() (store.ApplicationParams, error) {
 	}, nil
 }
 
-// AddApplication writes a new application against an existing
-// opportunity, in one transaction: insert the application row (status
-// "applied"), emit the matching `applied` event, recompute the
-// opportunity's latest_status. Either every row lands or none do.
+// ApplicationCreationInput bundles the full input for AddApplication so
+// an inline-created opportunity (and the company/contact graph beneath
+// it) commits in the same transaction as the application. Exactly one of
+// the two opportunity sources must be set: Application.OpportunityID
+// points at an existing opportunity, while Opportunity carries a brand-new
+// graph to insert first. Setting both, or neither, is ErrValidation.
+type ApplicationCreationInput struct {
+	Application ApplicationInput
+	Opportunity *OpportunityCreationInput
+}
+
+// validate enforces the "exactly one opportunity source" contract before
+// any transaction is opened. The opportunity graph's own field checks are
+// deferred to addOpportunityTx; the application body's to
+// ApplicationInput.normalize.
+func (in ApplicationCreationInput) validate() error {
+	hasID := strings.TrimSpace(in.Application.OpportunityID) != ""
+	hasInline := in.Opportunity != nil
+	switch {
+	case hasID && hasInline:
+		return fmt.Errorf("%w: pick an existing opportunity or create a new one, not both", ErrValidation)
+	case !hasID && !hasInline:
+		return fmt.Errorf("%w: an opportunity (existing id or new) is required", ErrValidation)
+	}
+	return nil
+}
+
+// AddApplication writes a new application in one transaction: when
+// in.Opportunity is set it first inserts the whole opportunity graph
+// (company, opportunity, "added" event, optional contact), then inserts
+// the application row (status "applied"), emits the matching `applied`
+// event, and recomputes the opportunity's latest_status. Either every row
+// lands or none do — so an aborted inline-create chain never leaves an
+// orphan opportunity behind.
 //
 // Returns ErrValidation for malformed input, ErrPrecondition when the
 // opportunity is already archived, store.ErrNotFound for an unknown
@@ -53,19 +83,35 @@ func (in ApplicationInput) normalize() (store.ApplicationParams, error) {
 // the partial unique index, not this code path, is the authority on
 // that conflict, which means concurrent callers reliably collapse to
 // exactly one winner.
-func (s *Service) AddApplication(ctx context.Context, in ApplicationInput) (model.Application, error) {
+func (s *Service) AddApplication(ctx context.Context, in ApplicationCreationInput) (model.Application, error) {
 	const op = "service.AddApplication"
 
-	params, err := in.normalize()
-	if err != nil {
+	if err := in.validate(); err != nil {
 		return model.Application{}, err
 	}
+
+	appIn := in.Application
 
 	tx, err := s.store.Begin(ctx)
 	if err != nil {
 		return model.Application{}, fmt.Errorf("%s: %w", op, err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Inline-created opportunity: insert the graph first, in this tx, and
+	// point the application at the row it just produced.
+	if in.Opportunity != nil {
+		opp, err := s.addOpportunityTx(ctx, tx, *in.Opportunity)
+		if err != nil {
+			return model.Application{}, err
+		}
+		appIn.OpportunityID = opp.ID
+	}
+
+	params, err := appIn.normalize()
+	if err != nil {
+		return model.Application{}, err
+	}
 
 	// Load + lock the opportunity row so the archived check below is
 	// consistent for the duration of the tx; the partial unique index
@@ -122,10 +168,25 @@ func (s *Service) ListApplications(ctx context.Context) ([]model.Application, er
 // UpdateApplication overwrites the editable, non-status-machine fields of
 // an application. Status transitions are emitted via the events engine,
 // not here.
+//
+// OpportunityID is immutable on update: the events table carries foreign
+// keys to both the application (events.application_id) and its opportunity
+// (events.opportunity_id), so re-parenting an application would orphan
+// every event already written against the original opportunity. Callers
+// that need to "move" an application must delete and re-create.
+// ErrPrecondition signals an attempted change; preserving the current
+// value (no-op) is allowed.
 func (s *Service) UpdateApplication(ctx context.Context, id string, in ApplicationInput) (model.Application, error) {
 	params, err := in.normalize()
 	if err != nil {
 		return model.Application{}, err
+	}
+	current, err := s.store.GetApplication(ctx, id)
+	if err != nil {
+		return model.Application{}, err
+	}
+	if params.OpportunityID != current.OpportunityID {
+		return model.Application{}, fmt.Errorf("%w: application opportunity_id is immutable", ErrPrecondition)
 	}
 	return s.store.UpdateApplication(ctx, id, params)
 }

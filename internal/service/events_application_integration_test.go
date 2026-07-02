@@ -18,7 +18,7 @@ import (
 func seedApplicationAt(ctx context.Context, t *testing.T, svc *service.Service) (oppID, appID string) {
 	t.Helper()
 	oppID = seedOpportunity(ctx, t, svc)
-	app, err := svc.AddApplication(ctx, service.ApplicationInput{OpportunityID: oppID})
+	app, err := svc.AddApplication(ctx, service.ApplicationCreationInput{Application: service.ApplicationInput{OpportunityID: oppID}})
 	if err != nil {
 		t.Fatalf("add application: %v", err)
 	}
