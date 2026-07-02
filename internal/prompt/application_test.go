@@ -13,9 +13,10 @@ import (
 )
 
 // fakeApplicationCreator stands in for *service.Service in AddApplication
-// tests. It embeds fakeOpportunityCreator so the inline-create branch
-// (which calls AddOpportunity through the same interface) can run without
-// a second mock.
+// tests. It embeds fakeOpportunityCreator to inherit the ListCompanies /
+// ListContacts methods that feed the inline-create branch's chained
+// company/contact pickers; the collected graph rides along on the single
+// AddApplication call rather than a separate AddOpportunity (asserted below).
 type fakeApplicationCreator struct {
 	fakeOpportunityCreator
 	opportunities []model.Opportunity
