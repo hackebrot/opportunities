@@ -137,6 +137,50 @@ func TestIntegrationSchemaInvariants(t *testing.T) {
 		`, oppB, appOnA)
 		assertForeignKeyViolation(t, err, "events_application_belongs_to_opportunity_fk")
 	})
+
+	t.Run("stage_id requires application_id", func(t *testing.T) {
+		companyID := insertCompany(ctx, t, pool, "hecme")
+		oppID := insertOpportunity(ctx, t, pool, companyID)
+
+		// stage_id set while application_id is NULL trips the CHECK; the
+		// composite FK short-circuits here (MATCH SIMPLE skips NULL columns).
+		_, err := pool.Exec(ctx, `
+			INSERT INTO events (opportunity_id, stage_id, kind, occurred_at)
+			VALUES ($1, gen_random_uuid(), 'stage_scheduled', now())
+		`, oppID)
+		assertCheckViolation(t, err, "events_stage_requires_app_chk")
+	})
+
+	t.Run("stage_id must belong to the event's application", func(t *testing.T) {
+		companyID := insertCompany(ctx, t, pool, "iecme")
+		oppA := insertOpportunity(ctx, t, pool, companyID)
+		appA := insertApplication(ctx, t, pool, oppA, "applied")
+		oppB := insertOpportunity(ctx, t, pool, companyID)
+		appB := insertApplication(ctx, t, pool, oppB, "applied")
+		stageOnA := insertApplicationStage(ctx, t, pool, appA)
+
+		// An event on appB pointing at appA's stage: (appB, stageOnA) has no
+		// match in application_stages(application_id, id).
+		_, err := pool.Exec(ctx, `
+			INSERT INTO events (opportunity_id, application_id, stage_id, kind, occurred_at)
+			VALUES ($1, $2, $3, 'stage_scheduled', now())
+		`, oppB, appB, stageOnA)
+		assertForeignKeyViolation(t, err, "events_stage_belongs_to_app_fk")
+	})
+
+	t.Run("stage-linked event for its own application is allowed", func(t *testing.T) {
+		companyID := insertCompany(ctx, t, pool, "jecme")
+		oppID := insertOpportunity(ctx, t, pool, companyID)
+		appID := insertApplication(ctx, t, pool, oppID, "applied")
+		stageID := insertApplicationStage(ctx, t, pool, appID)
+
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO events (opportunity_id, application_id, stage_id, kind, occurred_at)
+			VALUES ($1, $2, $3, 'stage_scheduled', now())
+		`, oppID, appID, stageID); err != nil {
+			t.Fatalf("valid stage-linked event rejected: %v", err)
+		}
+	})
 }
 
 // TestIntegrationSchemaColumnTypes pins the storage-representation
@@ -310,6 +354,20 @@ func insertApplication(ctx context.Context, t *testing.T, pool *pgxpool.Pool, op
 	`, oppID, status).Scan(&id)
 	if err != nil {
 		t.Fatalf("insert application: %v", err)
+	}
+	return id
+}
+
+func insertApplicationStage(ctx context.Context, t *testing.T, pool *pgxpool.Pool, appID string) string {
+	t.Helper()
+	var id string
+	err := pool.QueryRow(ctx, `
+		INSERT INTO application_stages (application_id, order_index, label)
+		VALUES ($1, 0, 'Screen')
+		RETURNING id
+	`, appID).Scan(&id)
+	if err != nil {
+		t.Fatalf("insert application stage: %v", err)
 	}
 	return id
 }

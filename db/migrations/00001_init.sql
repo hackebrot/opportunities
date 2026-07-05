@@ -119,6 +119,10 @@ CREATE TABLE application_stages (
     created_at         timestamptz NOT NULL DEFAULT now(),
     updated_at         timestamptz NOT NULL DEFAULT now(),
     UNIQUE (application_id, order_index),
+    -- Composite unique referenced by events_stage_belongs_to_app_fk so a
+    -- stage-linked event can be checked against the stage's owning
+    -- application. id is already unique alone; this is the FK target.
+    UNIQUE (application_id, id),
     CONSTRAINT application_stages_outcome_chk
         CHECK (outcome IS NULL OR outcome IN ('passed','failed','skipped'))
 );
@@ -127,7 +131,7 @@ CREATE TABLE events (
     id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     opportunity_id  uuid        NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
     application_id  uuid,
-    stage_id        uuid        REFERENCES application_stages(id) ON DELETE SET NULL,
+    stage_id        uuid,
     kind            text        NOT NULL,
     occurred_at     timestamptz NOT NULL,
     label           text,
@@ -153,7 +157,20 @@ CREATE TABLE events (
     CONSTRAINT events_application_belongs_to_opportunity_fk
         FOREIGN KEY (opportunity_id, application_id)
         REFERENCES applications (opportunity_id, id)
-        ON DELETE CASCADE
+        ON DELETE CASCADE,
+    -- A stage-linked event must belong to an application: MATCH SIMPLE lets
+    -- a (NULL application_id, non-NULL stage_id) row slip past the composite
+    -- FK below, so this CHECK closes that half of the invariant.
+    CONSTRAINT events_stage_requires_app_chk
+        CHECK (stage_id IS NULL OR application_id IS NOT NULL),
+    -- The linked stage must belong to the same application as the event.
+    -- SET NULL (stage_id) nulls only the stage link when the stage row is
+    -- deleted, leaving application_id intact. Mirrors the opportunity FK
+    -- above; targets UNIQUE (application_id, id) on application_stages.
+    CONSTRAINT events_stage_belongs_to_app_fk
+        FOREIGN KEY (application_id, stage_id)
+        REFERENCES application_stages (application_id, id)
+        ON DELETE SET NULL (stage_id)
 );
 
 CREATE TABLE compensations (
