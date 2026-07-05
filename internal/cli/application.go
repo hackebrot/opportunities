@@ -146,7 +146,15 @@ func newApplicationShowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return printApplication(cmd.OutOrStdout(), app, asJSON)
+			stages, err := svc.ListApplicationStages(cmd.Context(), app.ID)
+			if err != nil {
+				return err
+			}
+			comps, err := svc.ListApplicationCompensations(cmd.Context(), app.ID)
+			if err != nil {
+				return err
+			}
+			return printApplicationDetail(cmd.OutOrStdout(), app, stages, comps, asJSON)
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit JSON instead of a table")
@@ -363,6 +371,43 @@ func applicationPickLabel(a model.Application) string {
 		blocked = " [blocked]"
 	}
 	return fmt.Sprintf("%s — %s%s", a.ID, a.Status, blocked)
+}
+
+// applicationDetailJSON is the `opps application show` payload: the
+// application's own fields (inlined via the embedded applicationJSON) plus
+// its interview-pipeline stages and any application-linked compensations
+// (offered/counter/accepted). Embedding keeps the application fields at the
+// top level, matching the plain create/update payload with `stages` and
+// `compensations` added.
+type applicationDetailJSON struct {
+	applicationJSON
+	Stages        []applicationStageJSON `json:"stages"`
+	Compensations []compensationJSON     `json:"compensations"`
+}
+
+func toApplicationDetailJSON(a model.Application, stages []model.ApplicationStage, comps []model.Compensation) applicationDetailJSON {
+	return applicationDetailJSON{
+		applicationJSON: toApplicationJSON(a),
+		Stages:          toApplicationStageJSONs(stages),
+		Compensations:   toCompensationJSONs(comps),
+	}
+}
+
+// printApplicationDetail renders an application together with its stages and
+// linked compensations. JSON nests them under `stages` / `compensations`;
+// the table appends a Stages section and a Compensations section below the
+// application's own fields (each omitted when empty).
+func printApplicationDetail(w io.Writer, a model.Application, stages []model.ApplicationStage, comps []model.Compensation, asJSON bool) error {
+	if asJSON {
+		return writeJSON(w, toApplicationDetailJSON(a, stages, comps))
+	}
+	if err := printApplication(w, a, false); err != nil {
+		return err
+	}
+	if err := printApplicationStageSection(w, stages); err != nil {
+		return err
+	}
+	return printCompensationSection(w, comps)
 }
 
 func printApplications(w io.Writer, items []model.Application, asJSON bool) error {
