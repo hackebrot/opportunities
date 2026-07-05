@@ -129,6 +129,12 @@ tested; partial-index race regression in place.
       prompts fire by installing a stub whose `Select`/`Text`/`Confirm`
       methods fail the test, instead of relying on `InterfaceFrom`'s panic
       when no `Interface` is installed.
+- [ ] **T27** (#56) — Currency-aware compensation amount formatting in
+      `opps opportunity show` / `opps application show`: render `base_minor`
+      / `bonus_minor` as major units with per-currency separators — USD
+      `95,000.00`, EUR `95.000,00` (thousands and decimal separators
+      inverted). Table output only; `--json` keeps the raw integer minor
+      units for machine consumers. Follow-up to T20.
 - [ ] **T23** (#23) — Tag `v0.1.0`: CI green on merge commit; manual smoke run
       covering every exit-gate user story; `git tag v0.1.0`.
 
