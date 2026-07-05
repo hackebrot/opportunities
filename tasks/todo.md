@@ -105,7 +105,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
       `opps application` parent with `create` (full from-scratch with
       chained inline-create through opportunity), `list`, `show`,
       `update`, `rm`.
-- [ ] **T20** (#20) — Compensation & application_stages stubs: tables exist,
+- [x] **T20** (#20) — Compensation & application_stages stubs: tables exist,
       store-layer CRUD scaffolded, `opps <entity> show` reads them. No CLI commands.
 
 **Checkpoint D** — US1, US2, US8, US10 covered; all spec invariants
