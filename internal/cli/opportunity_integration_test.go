@@ -479,6 +479,87 @@ func TestIntegrationOpportunityEventCreateRejectViaCLI(t *testing.T) {
 	}
 }
 
+// TestIntegrationReapplyAfterTerminalViaCLI proves re-applying after a
+// terminal application works at the CLI boundary: once an application
+// reaches a terminal status the partial unique index frees the active
+// slot, so `opps opportunity apply` on the same opportunity succeeds a
+// second time and records a distinct application. The first application is
+// rejected via `event create`; the second apply must land, be a new row,
+// and flip latest_status back to applied.
+func TestIntegrationReapplyAfterTerminalViaCLI(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	st := startPostgresStore(ctx, t)
+	if err := st.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+
+	dsn := st.Pool.Config().ConnString()
+	t.Setenv("OPPS_DATABASE_URL", dsn)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	companyOut := runCmd(ctx, t, "--non-interactive", "company", "create",
+		"--name", "Acme Corp", "--json")
+	companyID := decodeCompanyJSON(t, companyOut).ID
+
+	createOut := runCmd(ctx, t, "--non-interactive", "opportunity", "create",
+		"--company", companyID,
+		"--role-title", "Staff Engineer",
+		"--office-days-per-week", "0",
+		"--source", "outbound",
+		"--json")
+	oppID := decodeOpportunityJSON(t, createOut).ID
+
+	// First application, then reject it to a terminal status.
+	firstApp := decodeApplicationJSON(t, runCmd(ctx, t, "--non-interactive",
+		"opportunity", "apply", oppID, "--json"))
+	if firstApp.Status != "applied" {
+		t.Fatalf("first apply status = %q, want applied", firstApp.Status)
+	}
+	runCmd(ctx, t, "--non-interactive",
+		"opportunity", "event", "create", oppID,
+		"--kind", "rejected",
+		"--archive-reason-category", "process_ended",
+		"--json")
+	if got := decodeOpportunityJSON(t, runCmd(ctx, t,
+		"opportunity", "show", oppID, "--json")).LatestStatus; got != "dormant" {
+		t.Fatalf("latest_status after rejection = %q, want dormant", got)
+	}
+
+	// Re-apply on the same opportunity: the terminal application has freed
+	// the active slot, so this must succeed and produce a distinct row.
+	secondApp := decodeApplicationJSON(t, runCmd(ctx, t, "--non-interactive",
+		"opportunity", "apply", oppID, "--json"))
+	if secondApp.Status != "applied" {
+		t.Fatalf("re-apply status = %q, want applied", secondApp.Status)
+	}
+	if secondApp.OpportunityID != oppID {
+		t.Fatalf("re-apply opportunity_id = %q, want %q", secondApp.OpportunityID, oppID)
+	}
+	if secondApp.ID == firstApp.ID {
+		t.Fatalf("re-apply reused application id %q, want a new row", secondApp.ID)
+	}
+
+	// latest_status follows the new active application back to applied.
+	if got := decodeOpportunityJSON(t, runCmd(ctx, t,
+		"opportunity", "show", oppID, "--json")).LatestStatus; got != "applied" {
+		t.Fatalf("latest_status after re-apply = %q, want applied", got)
+	}
+
+	// Both applications persist under the one opportunity (1:N).
+	var count int
+	if err := st.Pool.QueryRow(
+		ctx,
+		`SELECT count(*) FROM applications WHERE opportunity_id = $1`, oppID,
+	).Scan(&count); err != nil {
+		t.Fatalf("count applications: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("application count = %d, want 2", count)
+	}
+}
+
 type applicationJSONShape struct {
 	ID                    string  `json:"id"`
 	OpportunityID         string  `json:"opportunity_id"`
