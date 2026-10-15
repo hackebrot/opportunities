@@ -211,7 +211,11 @@ func newOpportunityShowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return printOpportunity(cmd.OutOrStdout(), opp, asJSON)
+			comps, err := svc.ListOpportunityCompensations(cmd.Context(), opp.ID)
+			if err != nil {
+				return err
+			}
+			return printOpportunityDetail(cmd.OutOrStdout(), opp, comps, asJSON)
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit JSON instead of a table")
@@ -738,6 +742,37 @@ func printOpportunity(w io.Writer, o model.Opportunity, asJSON bool) error {
 		}
 	}
 	return tw.Flush()
+}
+
+// opportunityDetailJSON is the `opps opportunity show` payload: the
+// opportunity's own fields (inlined via the embedded opportunityJSON) plus
+// the compensation rows linked to it. Embedding keeps the opportunity
+// fields at the top level so consumers of the plain create/update payload
+// see the same shape here, with `compensations` added.
+type opportunityDetailJSON struct {
+	opportunityJSON
+	Compensations []compensationJSON `json:"compensations"`
+}
+
+func toOpportunityDetailJSON(o model.Opportunity, comps []model.Compensation) opportunityDetailJSON {
+	return opportunityDetailJSON{
+		opportunityJSON: toOpportunityJSON(o),
+		Compensations:   toCompensationJSONs(comps),
+	}
+}
+
+// printOpportunityDetail renders an opportunity together with its linked
+// compensations. JSON nests them under `compensations`; the table appends
+// a Compensations section below the opportunity's own fields (omitted when
+// there are none).
+func printOpportunityDetail(w io.Writer, o model.Opportunity, comps []model.Compensation, asJSON bool) error {
+	if asJSON {
+		return writeJSON(w, toOpportunityDetailJSON(o, comps))
+	}
+	if err := printOpportunity(w, o, false); err != nil {
+		return err
+	}
+	return printCompensationSection(w, comps)
 }
 
 func printOpportunities(w io.Writer, items []model.Opportunity, asJSON bool) error {

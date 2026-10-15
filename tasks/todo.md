@@ -105,7 +105,7 @@ all green; `opps version`, `opps db migrate up`, `opps config path` all work.
       `opps application` parent with `create` (full from-scratch with
       chained inline-create through opportunity), `list`, `show`,
       `update`, `rm`.
-- [ ] **T20** (#20) — Compensation & application_stages stubs: tables exist,
+- [x] **T20** (#20) — Compensation & application_stages stubs: tables exist,
       store-layer CRUD scaffolded, `opps <entity> show` reads them. No CLI commands.
 
 **Checkpoint D** — US1, US2, US8, US10 covered; all spec invariants
@@ -129,6 +129,40 @@ tested; partial-index race regression in place.
       prompts fire by installing a stub whose `Select`/`Text`/`Confirm`
       methods fail the test, instead of relying on `InterfaceFrom`'s panic
       when no `Interface` is installed.
+- [ ] **T27** (#56) — Currency-aware compensation amount formatting in
+      `opps opportunity show` / `opps application show`: render `base_minor`
+      / `bonus_minor` as major units with per-currency separators — USD
+      `95,000.00`, EUR `95.000,00` (thousands and decimal separators
+      inverted). Table output only; `--json` keeps the raw integer minor
+      units for machine consumers. Follow-up to T20.
+- [ ] **T28** (#57) — `opps application note [<id>] [<text>]` (top-level
+      `opps note` as alias): append a `note` event with `application_id`
+      set, so notes attach to a specific application rather than only its
+      opportunity. Picker (when no positional given) lists active
+      applications. `opps opportunity note` stays for pre-application
+      notes.
+- [ ] **T29** (#58) — Rejection details on terminal applications: terminal
+      events (`rejected`/`declined`/`withdrawn`/`accepted`) mirror the
+      event's notes into `applications.archive_reason`, matching how
+      `opps opportunity archive` fills `opportunities.archive_reason`. The
+      interactive `opps opportunity event create` flow prompts for optional
+      details after the reason category. Tighten
+      `applications_archive_reason_chk` so terminal statuses other than
+      `accepted` require a non-NULL category (today a NULL category passes
+      the CHECK), with an integration test inserting the NULL case; add the
+      neither-parent-set case to the compensations one-parent CHECK test.
+- [ ] **T30** (#59) — Default `applications.applied_at` to the `applied`
+      event's `occurred_at` when not supplied, per the spec's transition
+      table. Interactive `opps application create` prompts for it with
+      "now" as the default; `--applied-at` still overrides. Integration
+      test asserts the column is set after `opps opportunity apply`.
+- [ ] **T31** (#60) — e2e tier: `e2e/` package with `//go:build e2e`
+      tests that build `opps`, run it as a subprocess against the local
+      `opportunities_e2e` database, and assert stdout + DB state. Cover
+      the exit-gate stories the plan routed to e2e: one-shot apply
+      (with `applied_at` set), active app → rejected with reason category
+      and details, follow-up blocked/done, re-apply after terminal,
+      application notes.
 - [ ] **T23** (#23) — Tag `v0.1.0`: CI green on merge commit; manual smoke run
       covering every exit-gate user story; `git tag v0.1.0`.
 

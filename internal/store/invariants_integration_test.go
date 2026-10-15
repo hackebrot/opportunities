@@ -137,6 +137,182 @@ func TestIntegrationSchemaInvariants(t *testing.T) {
 		`, oppB, appOnA)
 		assertForeignKeyViolation(t, err, "events_application_belongs_to_opportunity_fk")
 	})
+
+	t.Run("stage_id requires application_id", func(t *testing.T) {
+		companyID := insertCompany(ctx, t, pool, "hecme")
+		oppID := insertOpportunity(ctx, t, pool, companyID)
+
+		// stage_id set while application_id is NULL trips the CHECK; the
+		// composite FK short-circuits here (MATCH SIMPLE skips NULL columns).
+		_, err := pool.Exec(ctx, `
+			INSERT INTO events (opportunity_id, stage_id, kind, occurred_at)
+			VALUES ($1, gen_random_uuid(), 'stage_scheduled', now())
+		`, oppID)
+		assertCheckViolation(t, err, "events_stage_requires_app_chk")
+	})
+
+	t.Run("stage_id must belong to the event's application", func(t *testing.T) {
+		companyID := insertCompany(ctx, t, pool, "iecme")
+		oppA := insertOpportunity(ctx, t, pool, companyID)
+		appA := insertApplication(ctx, t, pool, oppA, "applied")
+		oppB := insertOpportunity(ctx, t, pool, companyID)
+		appB := insertApplication(ctx, t, pool, oppB, "applied")
+		stageOnA := insertApplicationStage(ctx, t, pool, appA)
+
+		// An event on appB pointing at appA's stage: (appB, stageOnA) has no
+		// match in application_stages(application_id, id).
+		_, err := pool.Exec(ctx, `
+			INSERT INTO events (opportunity_id, application_id, stage_id, kind, occurred_at)
+			VALUES ($1, $2, $3, 'stage_scheduled', now())
+		`, oppB, appB, stageOnA)
+		assertForeignKeyViolation(t, err, "events_stage_belongs_to_app_fk")
+	})
+
+	t.Run("stage-linked event for its own application is allowed", func(t *testing.T) {
+		companyID := insertCompany(ctx, t, pool, "jecme")
+		oppID := insertOpportunity(ctx, t, pool, companyID)
+		appID := insertApplication(ctx, t, pool, oppID, "applied")
+		stageID := insertApplicationStage(ctx, t, pool, appID)
+
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO events (opportunity_id, application_id, stage_id, kind, occurred_at)
+			VALUES ($1, $2, $3, 'stage_scheduled', now())
+		`, oppID, appID, stageID); err != nil {
+			t.Fatalf("valid stage-linked event rejected: %v", err)
+		}
+	})
+}
+
+// TestIntegrationSchemaColumnTypes pins the storage-representation
+// invariants that the CHECK-focused test above doesn't touch: every
+// timestamp column is timestamptz (a bare timestamp would silently drop
+// the zone and corrupt the stored instant), compensation money is bigint
+// minor units, and every id is a uuid defaulted from gen_random_uuid().
+// These introspect information_schema, so a migration that changed a
+// column's declared type would fail here.
+func TestIntegrationSchemaColumnTypes(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	store := startPostgresStore(ctx, t)
+	if err := store.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+	pool := store.Pool
+
+	t.Run("every timestamp column is timestamptz", func(t *testing.T) {
+		rows, err := pool.Query(ctx, `
+			SELECT table_name, column_name, data_type
+			FROM information_schema.columns
+			WHERE table_schema = 'public'
+			  AND table_name <> 'goose_db_version'  -- goose's own bookkeeping table, not our schema
+			  AND data_type LIKE 'timestamp%'
+			ORDER BY table_name, column_name
+		`)
+		if err != nil {
+			t.Fatalf("query timestamp columns: %v", err)
+		}
+		defer rows.Close()
+
+		found := 0
+		for rows.Next() {
+			var table, column, dataType string
+			if err := rows.Scan(&table, &column, &dataType); err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			found++
+			if dataType != "timestamp with time zone" {
+				t.Errorf("%s.%s is %q, want \"timestamp with time zone\"", table, column, dataType)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("iterate: %v", err)
+		}
+		if found == 0 {
+			t.Fatal("found no timestamp columns — the query is wrong or the schema is empty")
+		}
+	})
+
+	t.Run("compensation money columns are bigint", func(t *testing.T) {
+		for _, column := range []string{"base_minor", "bonus_minor"} {
+			var dataType string
+			err := pool.QueryRow(ctx, `
+				SELECT data_type FROM information_schema.columns
+				WHERE table_schema = 'public'
+				  AND table_name = 'compensations' AND column_name = $1
+			`, column).Scan(&dataType)
+			if err != nil {
+				t.Fatalf("query compensations.%s: %v", column, err)
+			}
+			if dataType != "bigint" {
+				t.Errorf("compensations.%s is %q, want \"bigint\"", column, dataType)
+			}
+		}
+	})
+
+	t.Run("every id column is uuid from gen_random_uuid", func(t *testing.T) {
+		rows, err := pool.Query(ctx, `
+			SELECT table_name, data_type, column_default
+			FROM information_schema.columns
+			WHERE table_schema = 'public'
+			  AND table_name <> 'goose_db_version'  -- goose's own bookkeeping table, not our schema
+			  AND column_name = 'id'
+			ORDER BY table_name
+		`)
+		if err != nil {
+			t.Fatalf("query id columns: %v", err)
+		}
+		defer rows.Close()
+
+		found := 0
+		for rows.Next() {
+			var table, dataType string
+			var columnDefault *string
+			if err := rows.Scan(&table, &dataType, &columnDefault); err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			found++
+			if dataType != "uuid" {
+				t.Errorf("%s.id is %q, want \"uuid\"", table, dataType)
+			}
+			if columnDefault == nil || !strings.Contains(*columnDefault, "gen_random_uuid()") {
+				def := "NULL"
+				if columnDefault != nil {
+					def = *columnDefault
+				}
+				t.Errorf("%s.id default is %q, want it to call gen_random_uuid()", table, def)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("iterate: %v", err)
+		}
+		if found == 0 {
+			t.Fatal("found no id columns — the query is wrong or the schema is empty")
+		}
+	})
+
+	t.Run("timestamptz column persists the instant, not the naive clock time", func(t *testing.T) {
+		companyID := insertCompany(ctx, t, pool, "acme")
+		oppID := insertOpportunity(ctx, t, pool, companyID)
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO events (opportunity_id, kind, occurred_at)
+			VALUES ($1, 'note', '2026-06-01 14:00:00+02:00')
+		`, oppID); err != nil {
+			t.Fatalf("insert event: %v", err)
+		}
+		var got time.Time
+		if err := pool.QueryRow(ctx, `
+			SELECT occurred_at FROM events WHERE opportunity_id = $1
+		`, oppID).Scan(&got); err != nil {
+			t.Fatalf("read occurred_at: %v", err)
+		}
+		want := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+		if !got.Equal(want) {
+			t.Errorf("occurred_at round-tripped to %s, want the same instant as %s "+
+				"(a naive timestamp column would have dropped the +02:00 offset)",
+				got.UTC().Format(time.RFC3339), want.Format(time.RFC3339))
+		}
+	})
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -178,6 +354,20 @@ func insertApplication(ctx context.Context, t *testing.T, pool *pgxpool.Pool, op
 	`, oppID, status).Scan(&id)
 	if err != nil {
 		t.Fatalf("insert application: %v", err)
+	}
+	return id
+}
+
+func insertApplicationStage(ctx context.Context, t *testing.T, pool *pgxpool.Pool, appID string) string {
+	t.Helper()
+	var id string
+	err := pool.QueryRow(ctx, `
+		INSERT INTO application_stages (application_id, order_index, label)
+		VALUES ($1, 0, 'Screen')
+		RETURNING id
+	`, appID).Scan(&id)
+	if err != nil {
+		t.Fatalf("insert application stage: %v", err)
 	}
 	return id
 }
