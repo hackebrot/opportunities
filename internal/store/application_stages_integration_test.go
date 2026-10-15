@@ -183,3 +183,57 @@ func TestIntegrationApplicationStagesConstraints(t *testing.T) {
 		t.Fatalf("unknown application: want ErrNotFound, got %v", err)
 	}
 }
+
+// TestIntegrationUpdateApplicationStageReferencedByEvent proves that
+// moving a stage referenced by an event to another existing application
+// maps to ErrConflict: the destination application exists, but the
+// event's (application_id, stage_id) link would no longer hold.
+func TestIntegrationUpdateApplicationStageReferencedByEvent(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	store := startPostgresStore(ctx, t)
+	if err := store.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+
+	oppA := seedOpportunity(ctx, t, store, "Acme Corp", "acmecorp")
+	oppB := seedOpportunity(ctx, t, store, "Becme Corp", "becmecorp")
+	appA, err := store.InsertApplication(ctx, store.Pool,
+		ApplicationParams{OpportunityID: oppA}, "applied")
+	if err != nil {
+		t.Fatalf("seed application A: %v", err)
+	}
+	appB, err := store.InsertApplication(ctx, store.Pool,
+		ApplicationParams{OpportunityID: oppB}, "applied")
+	if err != nil {
+		t.Fatalf("seed application B: %v", err)
+	}
+	params := ApplicationStageParams{
+		ApplicationID: appA.ID,
+		OrderIndex:    1,
+		Label:         "Screen",
+	}
+	stage, err := store.InsertApplicationStage(ctx, store.Pool, params)
+	if err != nil {
+		t.Fatalf("seed stage: %v", err)
+	}
+	if _, err := store.InsertEvent(ctx, store.Pool, EventParams{
+		OpportunityID: oppA,
+		ApplicationID: &appA.ID,
+		StageID:       &stage.ID,
+		Kind:          "stage_scheduled",
+		OccurredAt:    time.Now(),
+	}); err != nil {
+		t.Fatalf("seed stage-linked event: %v", err)
+	}
+
+	params.ApplicationID = appB.ID
+	_, err = store.UpdateApplicationStage(ctx, stage.ID, params)
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("move event-referenced stage: want ErrConflict, got %v", err)
+	}
+	if errors.Is(err, ErrNotFound) {
+		t.Fatalf("move event-referenced stage: misclassified as ErrNotFound: %v", err)
+	}
+}

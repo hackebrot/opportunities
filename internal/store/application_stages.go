@@ -165,6 +165,12 @@ func translateApplicationStageErr(op string, err error) error {
 			// position in the same pipeline.
 			return fmt.Errorf("%w: order_index already used for this application", ErrConflict)
 		case pgForeignKeyViolation:
+			// Moving a stage to another application breaks the
+			// (application_id, stage_id) link of any event that references
+			// it; the destination application itself exists.
+			if pg.ConstraintName == "events_stage_belongs_to_app_fk" {
+				return fmt.Errorf("%w: stage is referenced by events on its current application", ErrConflict)
+			}
 			// application_id pointed at an application that doesn't exist.
 			return fmt.Errorf("%w: unknown application ID", ErrNotFound)
 		case pgCheckViolation:
