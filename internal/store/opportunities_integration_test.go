@@ -281,3 +281,53 @@ func TestIntegrationInsertEventCrossOpportunityApplication(t *testing.T) {
 		t.Fatalf("cross-opportunity application event: misclassified as ErrNotFound: %v", err)
 	}
 }
+
+// TestIntegrationInsertEventCrossApplicationStage proves an event whose
+// stage_id names a stage owned by a different application maps to
+// ErrConflict through InsertEvent's error translation. Both the stage and
+// the event's application exist; only the relationship is invalid.
+func TestIntegrationInsertEventCrossApplicationStage(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	store := startPostgresStore(ctx, t)
+	if err := store.MigrateUp(ctx); err != nil {
+		t.Fatalf("migrate up: %v", err)
+	}
+
+	oppA := seedOpportunity(ctx, t, store, "Acme Corp", "acmecorp")
+	oppB := seedOpportunity(ctx, t, store, "Becme Corp", "becmecorp")
+	appA, err := store.InsertApplication(ctx, store.Pool,
+		ApplicationParams{OpportunityID: oppA}, "applied")
+	if err != nil {
+		t.Fatalf("seed application A: %v", err)
+	}
+	appB, err := store.InsertApplication(ctx, store.Pool,
+		ApplicationParams{OpportunityID: oppB}, "applied")
+	if err != nil {
+		t.Fatalf("seed application B: %v", err)
+	}
+	stageOnA, err := store.InsertApplicationStage(ctx, store.Pool, ApplicationStageParams{
+		ApplicationID: appA.ID,
+		OrderIndex:    1,
+		Label:         "Screen",
+	})
+	if err != nil {
+		t.Fatalf("seed stage on A: %v", err)
+	}
+
+	// Event on application B pointing at A's stage.
+	_, err = store.InsertEvent(ctx, store.Pool, EventParams{
+		OpportunityID: oppB,
+		ApplicationID: &appB.ID,
+		StageID:       &stageOnA.ID,
+		Kind:          "stage_scheduled",
+		OccurredAt:    time.Now(),
+	})
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("cross-application stage event: want ErrConflict, got %v", err)
+	}
+	if errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-application stage event: misclassified as ErrNotFound: %v", err)
+	}
+}

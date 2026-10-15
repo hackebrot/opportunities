@@ -77,12 +77,17 @@ func translateEventErr(op string, err error) error {
 			// when no such application exists and when the application belongs
 			// to a different opportunity; the two are indistinguishable by
 			// constraint name. Either way the opportunity_id is valid, so this
-			// is a relationship conflict. The other FKs (opportunity_id,
-			// stage_id) fire when the referenced row is simply absent.
-			if pg.ConstraintName == "events_application_belongs_to_opportunity_fk" {
+			// is a relationship conflict. The stage FK is composite the same
+			// way: (application_id, stage_id) must match a stage owned by
+			// that application. Only the plain opportunity_id FK fires when
+			// the referenced row is simply absent.
+			switch pg.ConstraintName {
+			case "events_application_belongs_to_opportunity_fk":
 				return fmt.Errorf("%w: event application is missing or belongs to another opportunity", ErrConflict)
+			case "events_stage_belongs_to_app_fk":
+				return fmt.Errorf("%w: event stage is missing or belongs to another application", ErrConflict)
 			}
-			return fmt.Errorf("%w: event references a missing opportunity or stage", ErrNotFound)
+			return fmt.Errorf("%w: event references a missing opportunity", ErrNotFound)
 		case pgCheckViolation:
 			return fmt.Errorf("%w: invalid event (%s)", ErrConflict, pg.ConstraintName)
 		}
